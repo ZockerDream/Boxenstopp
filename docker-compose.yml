@@ -1,0 +1,73 @@
+# Boxenstopp – Werkstatt-Management für RP-Server
+# Der Projektname bestimmt die Volumes. Nicht ändern, sonst startet die App mit leerer Datenbank.
+name: boxenstopp
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-boxenstopp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD in .env setzen}
+      POSTGRES_DB: ${DB_NAME:-boxenstopp}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      network: host
+    image: boxenstopp-api:${IMAGE_TAG:-0.2.0}
+    pull_policy: build
+    env_file: .env
+    environment:
+      DB_HOST: db
+      RATE_LIMIT_LOGIN: ${RATE_LIMIT_LOGIN:-10}
+    ports:
+      - "${APP_PORT:-8090}:3000"
+    volumes:
+      - backups:/backups
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal, public]
+
+  worker:
+    <<: *hardening
+    image: boxenstopp-api:${IMAGE_TAG:-0.2.0}
+    pull_policy: never
+    command: ["node", "src/worker.js"]
+    env_file: .env
+    environment:
+      DB_HOST: db
+    volumes:
+      - backups:/backups
+    healthcheck:
+      disable: true
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [internal]
+
+volumes:
+  db_data:
+  backups:
+
+networks:
+  internal:
+    internal: true
+  public:
