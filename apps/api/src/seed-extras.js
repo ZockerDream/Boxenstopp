@@ -31,19 +31,19 @@ ${wheels.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#111"/><
 }
 
 const MODELS = [
-  ['Kestrel', 'Vireo GT', 'Sport', 'coupe', 185000, 2, 298, 'Heck', 'Benzin', 'Leichter Sportwagen mit Mittelmotor. Beliebt bei Tunern, sehr gut für Rennstrecken.', 'Motor bis Stufe 3, Turbo empfohlen ab Stufe 2.', ['#f97316', '#ef4444']],
-  ['Kestrel', 'Strada', 'Sport', 'coupe', 142000, 4, 272, 'Heck', 'Benzin', 'Alltagstauglicher Sportler mit Notsitzen.', 'Federung Sport lohnt sich.', ['#2563eb', '#e5e7eb']],
-  ['Halden', 'Sedan 500', 'Limousine', 'sedan', 68000, 5, 210, 'Front', 'Benzin', 'Die Taxi-Limousine schlechthin. Robust, günstig in der Wartung.', 'Selten getunt, oft Inspektion und Reifen.', ['#eab308', '#111827']],
-  ['Halden', 'Cruiser V8', 'Limousine', 'sedan', 96000, 5, 245, 'Heck', 'Benzin', 'Große V8-Limousine, beliebt bei Fraktionen.', 'Panzerung möglich.', ['#111827', '#6b7280']],
-  ['Moravo', 'Ranger X', 'SUV', 'suv', 88000, 7, 205, 'Allrad', 'Diesel', 'Geländegängiger SUV mit viel Platz.', 'Fahrwerk höherlegen statt tiefer.', ['#4d7c0f', '#d4d4d8']],
-  ['Moravo', 'Atlas', 'SUV', 'suv', 124000, 5, 230, 'Allrad', 'Hybrid', 'Luxus-SUV mit Hybridantrieb.', '', ['#e5e7eb', '#0f172a']],
-  ['Brixton', 'Mini C', 'Kompakt', 'compact', 24000, 4, 175, 'Front', 'Benzin', 'Stadtflitzer, günstig im Unterhalt.', '', ['#22c55e', '#f43f5e']],
-  ['Brixton', 'Pulse', 'Kompakt', 'compact', 31000, 4, 190, 'Front', 'Elektro', 'Elektrischer Kompaktwagen.', 'Kein Motor-Tuning möglich (Elektro).', ['#06b6d4', '#a855f7']],
-  ['Velan', 'Zephyr R', 'Super', 'coupe', 420000, 2, 340, 'Allrad', 'Benzin', 'Supersportwagen mit Carbon-Karosserie. Teile teuer, Lieferzeit beachten.', 'Preise der Klasse Super gelten.', ['#111827', '#f59e0b']],
-  ['Velan', 'Nyx', 'Super', 'coupe', 365000, 2, 331, 'Heck', 'Benzin', 'Extrem flach, Vorsicht auf der Hebebühne.', '', ['#7c3aed', '#e5e7eb']],
-  ['Arken', 'Blade 900', 'Motorrad', 'bike', 21000, 2, 285, 'Kette', 'Benzin', 'Supersportler auf zwei Rädern.', 'Motorrad-Preise beachten.', ['#dc2626', '#111827']],
-  ['Tarvos', 'Hauler 3', 'Nutzfahrzeug', 'truck', 74000, 3, 140, 'Heck', 'Diesel', 'Schwerer Abschleppwagen mit Plateau. Basis unseres Abschleppdienstes.', '', ['#f59e0b', '#64748b']],
-  ['Tarvos', 'Interceptor', 'Limousine', 'sedan', 79000, 5, 250, 'Allrad', 'Benzin', 'Einsatzfahrzeug der Behörden. Nur für berechtigte Kunden.', 'Keine Optik-Änderungen an Behördenfahrzeugen.', ['#1e3a8a', '#f8fafc']],
+  ['Porsche', '718 Cayman GTS 4.0', 'Sport', 'coupe', 105000, 2, 293, 'Heck', 'Benzin', 'Leichter Sportwagen mit Mittelmotor. Beliebt bei Tunern, sehr gut für Rennstrecken.', 'Motor bis Stufe 3, Turbo empfohlen ab Stufe 2.', ['#f97316', '#ef4444']],
+  ['BMW', 'M4 Competition Coupé', 'Sport', 'coupe', 98000, 4, 290, 'Heck', 'Benzin', 'Alltagstauglicher Sportler mit vier Sitzen.', 'Federung Sport lohnt sich.', ['#2563eb', '#e5e7eb']],
+  ['Škoda', 'Superb 2.0 TDI', 'Limousine', 'sedan', 48000, 5, 232, 'Front', 'Diesel', 'Die Taxi-Limousine schlechthin. Robust, günstig in der Wartung.', 'Selten getunt, oft Inspektion und Reifen.', ['#eab308', '#111827']],
+  ['Mercedes-Benz', 'S 580 4MATIC', 'Limousine', 'sedan', 150000, 5, 250, 'Allrad', 'Benzin', 'Große V8-Limousine, beliebt bei Fraktionen.', 'Panzerung möglich.', ['#111827', '#6b7280']],
+  ['Toyota', 'Land Cruiser 250', 'SUV', 'suv', 72000, 7, 165, 'Allrad', 'Diesel', 'Geländegängiger SUV mit viel Platz.', 'Fahrwerk höherlegen statt tiefer.', ['#4d7c0f', '#d4d4d8']],
+  ['Land Rover', 'Range Rover P550e', 'SUV', 'suv', 160000, 5, 242, 'Allrad', 'Hybrid', 'Luxus-SUV mit Plug-in-Hybridantrieb.', '', ['#e5e7eb', '#0f172a']],
+  ['Volkswagen', 'Polo 1.0 TSI', 'Kompakt', 'compact', 24000, 5, 187, 'Front', 'Benzin', 'Stadtflitzer, günstig im Unterhalt.', '', ['#22c55e', '#f43f5e']],
+  ['Renault', '5 E-Tech Electric', 'Kompakt', 'compact', 33000, 5, 150, 'Front', 'Elektro', 'Elektrischer Kleinwagen.', 'Kein Motor-Tuning möglich (Elektro).', ['#06b6d4', '#a855f7']],
+  ['Lamborghini', 'Huracán EVO', 'Super', 'coupe', 240000, 2, 325, 'Allrad', 'Benzin', 'Supersportwagen mit V10-Mittelmotor. Teile teuer, Lieferzeit beachten.', 'Preise der Klasse Super gelten.', ['#111827', '#f59e0b']],
+  ['McLaren', '750S', 'Super', 'coupe', 300000, 2, 332, 'Heck', 'Benzin', 'Extrem flach, Vorsicht auf der Hebebühne.', '', ['#7c3aed', '#e5e7eb']],
+  ['Honda', 'CBR1000RR-R Fireblade', 'Motorrad', 'bike', 29000, 2, 299, 'Kette', 'Benzin', 'Supersportler auf zwei Rädern.', 'Motorrad-Preise beachten.', ['#dc2626', '#111827']],
+  ['MAN', 'TGL 12.250 Plateau', 'Nutzfahrzeug', 'truck', 95000, 3, 90, 'Heck', 'Diesel', 'Schwerer Abschleppwagen mit Plateau. Basis unseres Abschleppdienstes.', '', ['#f59e0b', '#64748b']],
+  ['Dodge', 'Charger Pursuit', 'Limousine', 'sedan', 55000, 5, 240, 'Allrad', 'Benzin', 'Einsatzfahrzeug der Behörden. Nur für berechtigte Kunden.', 'Keine Optik-Änderungen an Behördenfahrzeugen.', ['#1e3a8a', '#f8fafc']],
 ];
 const BG = [['#0f172a', '#334155'], ['#1f2937', '#78350f'], ['#082f49', '#0f766e'], ['#3b0764', '#831843']];
 
@@ -143,15 +143,15 @@ export async function seedExtras({ T, U, CU, D }) {
   // Fuhrpark der Werkstatt
   const F = {};
   const fleet = [
-    ['Abschlepper 1', 'RF 1001', 'Abschleppwagen', 'Tarvos Hauler 3', 'in_use', U.Jonas, 48210, addDays(T, 26), 55000, addDays(T, 120), 74000, addDays(T, -300)],
-    ['Abschlepper 2', 'RF 1002', 'Abschleppwagen', 'Tarvos Hauler 3', 'available', null, 31980, addDays(T, 5), 35000, addDays(T, 120), 74000, addDays(T, -120)],
-    ['Servicewagen', 'RF 2001', 'Servicewagen', 'Moravo Ranger X', 'available', null, 22740, addDays(T, 48), 30000, addDays(T, 10), 88000, addDays(T, -200)],
-    ['Chefwagen', 'RF 7777', 'Dienstwagen', 'Velan Zephyr R', 'workshop', null, 9120, addDays(T, 90), 15000, addDays(T, 200), 420000, addDays(T, -60)],
+    ['Abschlepper 1', 'RF 1001', 'Abschleppwagen', 'MAN TGL 12.250 Plateau', 'in_use', U.Jonas, 48210, addDays(T, 26), 55000, addDays(T, 120), 74000, addDays(T, -300)],
+    ['Abschlepper 2', 'RF 1002', 'Abschleppwagen', 'MAN TGL 12.250 Plateau', 'available', null, 31980, addDays(T, 5), 35000, addDays(T, 120), 74000, addDays(T, -120)],
+    ['Servicewagen', 'RF 2001', 'Servicewagen', 'Toyota Land Cruiser 250', 'available', null, 22740, addDays(T, 48), 30000, addDays(T, 10), 88000, addDays(T, -200)],
+    ['Chefwagen', 'RF 7777', 'Dienstwagen', 'Lamborghini Huracán EVO', 'workshop', null, 9120, addDays(T, 90), 15000, addDays(T, 200), 420000, addDays(T, -60)],
   ];
   for (const [name, plate, kind, mm, status, driver, km, sd, skm, iu, price, bought] of fleet) {
-    const [make, ...rest] = mm.split(' ');
+    const [make, model] = MODELS.map((x) => [x[0], x[1]]).find(([a, b]) => a + ' ' + b === mm);
     const f = await one(`INSERT INTO fleet_vehicles (name, plate, kind, model_id, make, model, status, driver_id, km, service_due, service_km, insurance_until, purchase_price, purchased_on) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-      [name, plate, kind, M[mm], make, rest.join(' '), status, driver, km, sd, skm, iu, price, bought]);
+      [name, plate, kind, M[mm], make, model, status, driver, km, sd, skm, iu, price, bought]);
     F[name] = f.id;
   }
   const bank = (await one(`SELECT id FROM accounts WHERE name = 'Firmenkonto'`)).id;

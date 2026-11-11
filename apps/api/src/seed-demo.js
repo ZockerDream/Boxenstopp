@@ -144,8 +144,8 @@ const ctx = await tx(async (c) => {
     CU.push(await c.one(`INSERT INTO customers (name, kind, phone, price_group_id, terms_days, tags, warning, blocked, since) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [name, kind, '555-' + String(2000 + i * 37).slice(-4), PG[pg], kind === 'person' ? 0 : 14, extra.tags || [], extra.warning || null, extra.blocked || null, addDays(T, -int(20, 400))]));
   }
-  const models = [['Kestrel', 'Vireo GT', 'Sport'], ['Halden', 'Sedan 500', 'Limousine'], ['Moravo', 'Ranger X', 'SUV'], ['Brixton', 'Mini C', 'Kompakt'], ['Velan', 'Zephyr R', 'Super'], ['Arken', 'Blade 900', 'Motorrad'],
-    ['Tarvos', 'Hauler 3', 'Nutzfahrzeug'], ['Halden', 'Cruiser V8', 'Limousine'], ['Kestrel', 'Strada', 'Sport'], ['Moravo', 'Atlas', 'SUV'], ['Brixton', 'Pulse', 'Kompakt'], ['Velan', 'Nyx', 'Super']];
+  const models = [['Porsche', '718 Cayman GTS 4.0', 'Sport'], ['Škoda', 'Superb 2.0 TDI', 'Limousine'], ['Toyota', 'Land Cruiser 250', 'SUV'], ['Volkswagen', 'Polo 1.0 TSI', 'Kompakt'], ['Lamborghini', 'Huracán EVO', 'Super'], ['Honda', 'CBR1000RR-R Fireblade', 'Motorrad'],
+    ['MAN', 'TGL 12.250 Plateau', 'Nutzfahrzeug'], ['Mercedes-Benz', 'S 580 4MATIC', 'Limousine'], ['BMW', 'M4 Competition Coupé', 'Sport'], ['Land Rover', 'Range Rover P550e', 'SUV'], ['Renault', '5 E-Tech Electric', 'Kompakt'], ['McLaren', '750S', 'Super']];
   const colors = ['Schwarz', 'Weiß', 'Silber', 'Rot', 'Blau', 'Orange', 'Grün matt', 'Gelb', 'Grau metallic', 'Violett'];
   const letters = 'ABCDEFGHJKLMNPRSTUVWXYZ';
   const plates = new Set(['DF 4207', 'DF 7777']);
@@ -154,9 +154,9 @@ const ctx = await tx(async (c) => {
   const V = [];
   for (const [i, ci] of ownerOrder.entries()) {
     let m = pick(models);
-    if (ci === 15) m = ['Tarvos', 'Interceptor', 'Limousine'];
-    if (ci === 16 || ci === 18) m = ['Tarvos', 'Hauler 3', 'Nutzfahrzeug'];
-    if (ci === 17) m = ['Halden', 'Sedan 500', 'Limousine'];
+    if (ci === 15) m = ['Dodge', 'Charger Pursuit', 'Limousine'];
+    if (ci === 16 || ci === 18) m = ['MAN', 'TGL 12.250 Plateau', 'Nutzfahrzeug'];
+    if (ci === 17) m = ['Škoda', 'Superb 2.0 TDI', 'Limousine'];
     let p = plate(), km = int(4000, 160000), color = pick(colors);
     if (i === 0) { m = models[0]; p = 'DF 4207'; km = 38420; color = 'Orange'; }
     if (i === 1) { m = models[4]; p = 'DF 7777'; km = 12880; color = 'Schwarz'; }

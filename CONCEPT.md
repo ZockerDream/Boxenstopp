@@ -368,6 +368,22 @@ Wünsche des Auftraggebers vom 2026-11-11 (nach der ersten lauffähigen Version)
 - Zeitraum wählbar (Umsatz 7/14/30/90 Tage, Wochen 8/13/26).
 - Klick führt zu den Daten: Woche → Buchungen dieser Woche, Status-Segment → Auftragsliste mit diesem Status.
 
+### 15.7 Echte Fahrzeugmodelle
+
+Wunsch des Auftraggebers vom 2026-11-11: „Ersetz alle Fahrzeuge durch wirklich existierende Fahrzeuge in der DB.“ Die erfundenen Modelle im Fahrzeug-Katalog (und damit in Kundenfahrzeugen und Fuhrpark) sind durch reale Modelle ersetzt, passend zu Klasse und Rolle:
+
+| Klasse | Modelle |
+|---|---|
+| Sport | Porsche 718 Cayman GTS 4.0, BMW M4 Competition Coupé |
+| Super | Lamborghini Huracán EVO, McLaren 750S |
+| Limousine | Škoda Superb 2.0 TDI (Taxi), Mercedes-Benz S 580 4MATIC, Dodge Charger Pursuit (Behörden) |
+| SUV | Toyota Land Cruiser 250, Land Rover Range Rover P550e |
+| Kompakt | Volkswagen Polo 1.0 TSI, Renault 5 E-Tech Electric |
+| Motorrad | Honda CBR1000RR-R Fireblade |
+| Nutzfahrzeug | MAN TGL 12.250 Plateau (Abschleppwagen) |
+
+Die Katalogbilder bleiben gezeichnete Platzhalter (keine Herstellerfotos). Ausgestellte Rechnungen behalten im Snapshot die alten Namen (unveränderlich). Das Mockup bleibt bei den erfundenen Namen.
+
 ## 16. Offene Fragen
 
 Keine. Beantwortet am 2026-11-11: keine Vorsteuer, Gewinnsteuer oder Gewerbeabgabe; nur Festpreise; keine Mindeststunden.
