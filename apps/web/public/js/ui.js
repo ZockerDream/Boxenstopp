@@ -146,73 +146,145 @@
   const field = (label, control, opts) => `<div class="field ${opts && opts.full ? 'full' : ''}"><label>${esc(label)}</label>${control}${opts && opts.hint ? `<span class="hint">${esc(opts.hint)}</span>` : ''}</div>`;
   const input = (value, opts) => `<input class="input ${opts && opts.mono ? 'mono' : ''}" value="${esc(value)}" ${opts && opts.type ? `type="${opts.type}"` : ''} ${opts && opts.ph ? `placeholder="${esc(opts.ph)}"` : ''} ${opts && opts.attrs ? opts.attrs : ''}>`;
   const select = (options, value, attrs) => `<select class="input" ${attrs || ''}>${options.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}" ${String(v) === String(value) ? 'selected' : ''}>${esc(l)}</option>`; }).join('')}</select>`;
-  const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  // ---------- Markdown (sicher: erst escapen, dann wenige Formate) ----------
+  const inline = (s) => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<i>$2</i>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a class="link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-').replace(/^-|-$/g, '');
+  function mdBlock(src, opts) {
+    opts = opts || {};
+    const lines = String(src || '').replace(/\r/g, '').split('\n');
+    const out = [], toc = [];
+    let i = 0;
+    while (i < lines.length) {
+      const l = lines[i];
+      if (!l.trim()) { i++; continue; }
+      let m;
+      if ((m = l.match(/^(#{1,4})\s+(.*)$/))) {
+        const lv = m[1].length, id = (opts.prefix || 'h') + '-' + slug(m[2]) + '-' + i;
+        if (lv <= 3) toc.push({ lv, text: m[2], id });
+        out.push(`<h${lv + 1} id="${id}">${inline(m[2])}</h${lv + 1}>`); i++; continue;
+      }
+      if (/^(-{3,}|\*{3,})$/.test(l.trim())) { out.push('<hr>'); i++; continue; }
+      if (/^>\s?/.test(l)) { const b = []; while (i < lines.length && /^>\s?/.test(lines[i])) b.push(lines[i++].replace(/^>\s?/, '')); out.push(`<blockquote>${inline(b.join(' '))}</blockquote>`); continue; }
+      if (/^\|.*\|$/.test(l.trim())) {
+        const rows = []; while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) rows.push(lines[i++].trim().slice(1, -1).split('|').map((c) => c.trim()));
+        const body = rows.filter((r) => !r.every((c) => /^:?-{2,}:?$/.test(c)));
+        out.push(`<div class="table-wrap"><table class="table md-table no-stack"><thead><tr>${body[0].map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${body.slice(1).map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+        continue;
+      }
+      if (/^\s*([-*]|\d+\.)\s+/.test(l)) {
+        const ordered = /^\s*\d+\./.test(l); const items = [];
+        while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, ''));
+        out.push(`<${ordered ? 'ol' : 'ul'}>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`); continue;
+      }
+      const p = []; while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|>|\||\s*([-*]|\d+\.)\s|-{3,})/.test(lines[i])) p.push(lines[i++]);
+      if (!p.length) { out.push(`<p>${inline(lines[i++])}</p>`); continue; }
+      out.push(`<p>${p.map(inline).join('<br>')}</p>`);
+    }
+    return { html: `<div class="md">${out.join('')}</div>`, toc };
+  }
+  const md = (s) => inline(s);
 
-  // ---------- Diagramme (SVG) ----------
+  // ---------- Diagramme (SVG, interaktiv) ----------
+  // Interaktion: data-tip (Tooltip), data-href (Klick), Legende mit data-action="chart-toggle", Hover per CSS.
+  // Ausgeblendete Reihen stehen in BX.state.chartHidden[id].
+  const hiddenOf = (id) => (id && window.BX.state && window.BX.state.chartHidden && window.BX.state.chartHidden[id]) || [];
+  const fmtVal = (v, opts) => (opts && opts.count ? String(Math.round(v)) : money(v));
+  const axis = (v, opts) => (opts && opts.count ? String(Math.round(v)) : Math.abs(v) >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(Math.round(v)));
+  function legend(series, id) {
+    if (!series || series.length < 2 || !id) return '';
+    const hid = hiddenOf(id);
+    return `<div class="legend chart-legend">${series.map((s) => `<button type="button" class="leg ${hid.includes(s.key) ? 'off' : ''}" data-action="chart-toggle" data-arg="${esc(id)}:${esc(s.key)}" title="Ein-/ausblenden"><i style="background:${s.color}"></i>${esc(s.label)}</button>`).join('')}</div>`;
+  }
   function barChart(data, opts) {
     opts = opts || {};
-    const W = 640, H = opts.h || 200, P = { l: 44, r: 8, t: 10, b: 24 };
-    const keys = opts.keys || ['rev'];
-    const colors = opts.colors || ['var(--accent)', 'var(--surface-3)'];
-    const max = Math.max(...data.flatMap((d) => keys.map((k) => d[k]))) * 1.1 || 1;
+    const W = 640, H = opts.h || 210, P = { l: 44, r: 8, t: 12, b: 26 };
+    const all = opts.series || (opts.keys || ['rev']).map((k, i) => ({ key: k, label: k, color: (opts.colors || ['var(--accent)', 'var(--border-strong)'])[i] }));
+    const hid = hiddenOf(opts.id);
+    const series = all.filter((s) => !hid.includes(s.key));
+    const max = Math.max(1, ...data.flatMap((d) => series.map((s) => d[s.key] || 0))) * 1.12;
     const iw = W - P.l - P.r, ih = H - P.t - P.b;
-    const bw = iw / data.length;
-    const inner = keys.length > 1 ? bw * 0.72 / keys.length : bw * 0.6;
-    let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'Diagramm')}">`;
-    for (let i = 0; i <= 4; i++) {
-      const y = P.t + ih - ih * i / 4;
-      s += `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y}" y2="${y}"/><text x="${P.l - 6}" y="${y + 3}" text-anchor="end">${Math.round(max * i / 4 / 1000)}k</text>`;
-    }
+    const bw = iw / Math.max(1, data.length);
+    const inner = series.length > 1 ? bw * 0.74 / series.length : bw * 0.6;
+    const every = Math.ceil(data.length / 12);
+    let s = `<svg class="chart chart-bar" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'Diagramm')}">`;
+    for (let i = 0; i <= 4; i++) { const y = P.t + ih - ih * i / 4; s += `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y}" y2="${y}"/><text x="${P.l - 6}" y="${y + 3}" text-anchor="end">${axis(max * i / 4, opts)}</text>`; }
     data.forEach((d, i) => {
-      keys.forEach((k, j) => {
-        const h = ih * d[k] / max;
-        const x = P.l + i * bw + (bw - inner * keys.length) / 2 + j * inner;
-        s += `<rect x="${x.toFixed(1)}" y="${(P.t + ih - h).toFixed(1)}" width="${(inner - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${colors[j]}"><title>${esc(d.label)}: ${money(d[k])}</title></rect>`;
+      const tip = `${d.label}\n` + series.map((x) => `${x.label}: ${fmtVal(d[x.key] || 0, opts)}`).join('\n') + (opts.extraTip ? '\n' + opts.extraTip(d) : '');
+      const href = opts.href ? opts.href(d) : '';
+      s += `<g class="bar-group" data-tip="${esc(tip)}" ${href ? `data-href="${esc(href)}" style="cursor:pointer"` : ''}><rect class="hit" x="${(P.l + i * bw).toFixed(1)}" y="${P.t}" width="${bw.toFixed(1)}" height="${ih}" fill="transparent"/>`;
+      series.forEach((x, j) => {
+        const h = ih * (d[x.key] || 0) / max;
+        const bx = P.l + i * bw + (bw - inner * series.length) / 2 + j * inner;
+        s += `<rect class="bar" x="${bx.toFixed(1)}" y="${(P.t + ih - h).toFixed(1)}" width="${Math.max(1, inner - 2).toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="3" fill="${x.color}"/>`;
       });
-      s += `<text x="${P.l + i * bw + bw / 2}" y="${H - 7}" text-anchor="middle">${esc(d.label)}</text>`;
+      s += '</g>';
+      if (i % every === 0 || i === data.length - 1) s += `<text x="${P.l + i * bw + bw / 2}" y="${H - 8}" text-anchor="middle">${esc(d.label)}</text>`;
     });
-    return s + '</svg>';
+    return s + '</svg>' + legend(all, opts.id);
   }
   function areaChart(data, opts) {
     opts = opts || {};
-    const W = 640, H = opts.h || 190, P = { l: 44, r: 10, t: 12, b: 24 };
-    const max = Math.max(...data.map((d) => d.v)) * 1.15 || 1;
+    const W = 640, H = opts.h || 200, P = { l: 44, r: 12, t: 14, b: 26 };
+    const all = opts.series || [{ key: 'v', label: opts.valueLabel || 'Wert', color: 'var(--accent)' }];
+    const hid = hiddenOf(opts.id);
+    const series = all.filter((x) => !hid.includes(x.key));
+    const n = data.length;
+    const max = Math.max(1, ...data.flatMap((d) => series.map((x) => d[x.key] || 0))) * 1.15;
     const iw = W - P.l - P.r, ih = H - P.t - P.b;
-    const pts = data.map((d, i) => [P.l + iw * i / (data.length - 1), P.t + ih - ih * d.v / max]);
-    const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-    let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'Verlauf')}"><defs><linearGradient id="ag" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".35"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>`;
-    for (let i = 0; i <= 3; i++) { const y = P.t + ih - ih * i / 3; s += `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y}" y2="${y}"/><text x="${P.l - 6}" y="${y + 3}" text-anchor="end">${opts.count ? Math.round(max * i / 3) : (max * i / 3 / 1000).toFixed(1) + 'k'}</text>`; }
-    s += `<path d="${line} L${pts[pts.length - 1][0]} ${P.t + ih} L${pts[0][0]} ${P.t + ih} Z" fill="url(#ag)"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2"/>`;
-    pts.forEach((p, i) => {
-      s += `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 4 : 2.5}" fill="var(--accent)"><title>${esc(data[i].label)}: ${opts.count ? data[i].v : money(data[i].v)}</title></circle>`;
-      if (i % 2 === (data.length - 1) % 2) s += `<text x="${p[0]}" y="${H - 7}" text-anchor="middle">${esc(data[i].label)}</text>`;
+    const X = (i) => P.l + (n > 1 ? iw * i / (n - 1) : iw / 2);
+    const Y = (v) => P.t + ih - ih * v / max;
+    const gid = 'ag' + Math.random().toString(36).slice(2, 7);
+    let s = `<svg class="chart chart-area" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || 'Verlauf')}"><defs>${series.map((x, k) => `<linearGradient id="${gid}${k}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${x.color}" stop-opacity="${k ? 0.12 : 0.32}"/><stop offset="1" stop-color="${x.color}" stop-opacity="0"/></linearGradient>`).join('')}</defs>`;
+    for (let i = 0; i <= 3; i++) { const y = P.t + ih - ih * i / 3; s += `<line class="grid-line" x1="${P.l}" x2="${W - P.r}" y1="${y}" y2="${y}"/><text x="${P.l - 6}" y="${y + 3}" text-anchor="end">${axis(max * i / 3, opts)}</text>`; }
+    series.forEach((x, k) => {
+      const line = data.map((d, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(d[x.key] || 0).toFixed(1)).join(' ');
+      s += `<path d="${line} L${X(n - 1)} ${P.t + ih} L${X(0)} ${P.t + ih} Z" fill="url(#${gid}${k})"/><path d="${line}" fill="none" stroke="${x.color}" stroke-width="${k ? 1.6 : 2.2}" ${k ? 'stroke-dasharray="5 4"' : ''}/>`;
     });
-    return s + '</svg>';
+    const colW = n > 1 ? iw / (n - 1) : iw;
+    const every = Math.ceil(n / 8);
+    data.forEach((d, i) => {
+      const tip = `${d.label}\n` + series.map((x) => `${x.label}: ${fmtVal(d[x.key] || 0, opts)}`).join('\n');
+      const href = opts.href ? opts.href(d) : '';
+      s += `<g class="col" data-tip="${esc(tip)}" ${href ? `data-href="${esc(href)}" style="cursor:pointer"` : ''}><rect x="${(X(i) - colW / 2).toFixed(1)}" y="${P.t}" width="${colW.toFixed(1)}" height="${ih}" fill="transparent"/><line class="guide" x1="${X(i)}" x2="${X(i)}" y1="${P.t}" y2="${P.t + ih}"/>${series.map((x) => `<circle class="dot ${i === n - 1 ? 'last' : ''}" cx="${X(i).toFixed(1)}" cy="${Y(d[x.key] || 0).toFixed(1)}" r="${i === n - 1 && n < 40 ? 4 : n > 40 ? 0 : 2.5}" fill="${x.color}"/>`).join('')}</g>`;
+      if ((n - 1 - i) % every === 0) s += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle">${esc(d.label)}</text>`;
+    });
+    return s + '</svg>' + legend(all, opts.id);
   }
   const PALETTE = ['#f59e0b', '#3b82f6', '#22c55e', '#a855f7', '#ef4444', '#14b8a6', '#ec4899', '#84cc16'];
   function donut(data, opts) {
     opts = opts || {};
-    const total = data.reduce((s, d) => s + d.v, 0) || 1;
+    const hid = hiddenOf(opts.id);
+    const shown = data.map((d, i) => ({ ...d, i })).filter((d) => !hid.includes(String(d.i)));
+    const total = shown.reduce((s, d) => s + d.v, 0) || 1;
     const R = 54, C = 2 * Math.PI * R;
+    const fmt = opts.fmt || money;
     let off = 0;
-    let s = `<svg viewBox="0 0 140 140" width="150" height="150" role="img" aria-label="${esc(opts.label || 'Anteile')}"><circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--surface-3)" stroke-width="18"/>`;
-    data.forEach((d, i) => {
+    let s = `<svg class="donut" viewBox="0 0 140 140" width="160" height="160" role="img" aria-label="${esc(opts.label || 'Anteile')}"><circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--surface-3)" stroke-width="18"/>`;
+    shown.forEach((d) => {
       const len = C * d.v / total;
-      s += `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${PALETTE[i % PALETTE.length]}" stroke-width="18" stroke-dasharray="${(len - 1.5).toFixed(2)} ${(C - len + 1.5).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 70 70)"><title>${esc(d.label)}: ${money(d.v)}</title></circle>`;
+      const pct = Math.round(d.v / total * 1000) / 10;
+      s += `<circle class="seg" data-seg="${d.i}" data-tip="${esc(d.label)}\n${esc(fmt(d.v))} · ${pct} %" data-dl="${esc(d.label)}" data-dv="${esc(fmt(d.v))}" ${d.href ? `data-href="${esc(d.href)}" style="cursor:pointer"` : ''} cx="70" cy="70" r="${R}" fill="none" stroke="${PALETTE[d.i % PALETTE.length]}" stroke-width="18" stroke-dasharray="${Math.max(0, len - 1.5).toFixed(2)} ${(C - len + 1.5).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 70 70)"/>`;
       off += len;
     });
-    s += `<text x="70" y="66" text-anchor="middle" style="font-size:10px;fill:var(--muted)">${esc(opts.center || 'Gesamt')}</text><text x="70" y="84" text-anchor="middle" style="font-size:15px;font-weight:700;fill:var(--text)">${esc(opts.centerValue || money(total))}</text></svg>`;
-    const legend = data.map((d, i) => `<div><i style="background:${PALETTE[i % PALETTE.length]}"></i>${esc(d.label)}<b>${opts.fmt ? opts.fmt(d.v) : money(d.v)}</b></div>`).join('');
-    return `<div class="donut-wrap">${s}<div class="donut-legend">${legend}</div></div>`;
+    const cl = esc(opts.center || 'Gesamt'), cv = esc(opts.centerValue || fmt(total));
+    s += `<text class="dc-label" x="70" y="64" text-anchor="middle" data-def="${cl}" style="font-size:9.5px;fill:var(--muted)">${cl}</text><text class="dc-value" x="70" y="82" text-anchor="middle" data-def="${cv}" style="font-size:14px;font-weight:700;fill:var(--text)">${cv}</text></svg>`;
+    const leg = data.map((d, i) => `<div class="leg-row ${hid.includes(String(i)) ? 'off' : ''}" data-seg="${i}" ${opts.id ? `data-action="chart-toggle" data-arg="${esc(opts.id)}:${i}" role="button" tabindex="0" title="Ein-/ausblenden"` : ''}><i style="background:${PALETTE[i % PALETTE.length]}"></i>${esc(d.label)}<b>${esc((opts.fmt || money)(d.v))}</b></div>`).join('');
+    return `<div class="donut-wrap">${s}<div class="donut-legend">${leg}</div></div>`;
   }
-  const spark = (vals) => {
+  const spark = (vals, labels) => {
     const max = Math.max(...vals, 1);
-    return `<svg viewBox="0 0 ${vals.length * 12} 24" width="${vals.length * 12}" height="24">${vals.map((v, i) => `<rect x="${i * 12 + 1}" y="${24 - 22 * v / max}" width="9" height="${22 * v / max}" rx="2" fill="${i === vals.length - 1 ? 'var(--accent)' : 'var(--border-strong)'}"/>`).join('')}</svg>`;
+    return `<svg class="spark" viewBox="0 0 ${vals.length * 12} 24" width="${vals.length * 12}" height="24">${vals.map((v, i) => `<g data-tip="${esc((labels && labels[i]) || '')}: ${v}"><rect x="${i * 12}" y="0" width="12" height="24" fill="transparent"/><rect x="${i * 12 + 1}" y="${24 - 22 * v / max}" width="9" height="${22 * v / max}" rx="2" fill="${i === vals.length - 1 ? 'var(--accent)' : 'var(--border-strong)'}"/></g>`).join('')}</svg>`;
   };
+  // Zeitraum-Umschalter für Diagramme
+  const rangeSeg = (id, options, cur) => `<div class="seg seg-sm">${options.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'active' : ''}" data-action="chart-range" data-arg="${esc(id)}:${esc(v)}">${esc(l)}</button>`).join('')}</div>`;
+  const chartRange = (id, def) => (window.BX.state && window.BX.state.chartRange && window.BX.state.chartRange[id]) || def;
 
   window.BX.ui = {
     esc, money, date, shortDate, weekday, daysUntil, byId, user, cust, veh, rank, group, cls, pg, training, ltype, part, cat, item,
     initials, avatar, person, plate, badge, chip, statusMeta, statusBadge, invBadge, invStatus, kindBadge, kindLabel, custKind, userStatus, levelNames,
-    validity, icon, table, card, kpi, pageHead, btn, tabs, note, bar, toggle, field, input, select, md, barChart, areaChart, donut, spark, PALETTE,
+    validity, icon, table, card, kpi, pageHead, btn, tabs, note, bar, toggle, field, input, select, md, mdBlock, barChart, areaChart, donut, spark, PALETTE, rangeSeg, chartRange,
   };
 })();

@@ -14,19 +14,20 @@ import workshopRoutes from './routes/workshop.js';
 import financeRoutes from './routes/finance.js';
 import staffRoutes from './routes/staff.js';
 import adminRoutes from './routes/admin.js';
+import extraRoutes from './routes/extras.js';
 
 const app = Fastify({ logger: { level: 'warn' }, trustProxy: config.trustProxy, bodyLimit: 6 * 1024 * 1024 });
 await app.register(cookie);
 
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 app.addHook('onSend', async (req, reply, payload) => {
-  reply.header('Content-Security-Policy', CSP);
+  // Routen mit eigenen Headern (z. B. Bilder) behalten sie
+  if (!reply.hasHeader('Content-Security-Policy')) reply.header('Content-Security-Policy', CSP);
   reply.header('X-Content-Type-Options', 'nosniff');
   reply.header('Referrer-Policy', 'same-origin');
   reply.header('X-Frame-Options', 'DENY');
   reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
-  else reply.header('Cache-Control', 'no-cache'); // statische Dateien: immer kurz beim Server nachfragen (ETag)
+  if (!reply.hasHeader('Cache-Control')) reply.header('Cache-Control', req.url.startsWith('/api/') ? 'no-store' : 'no-cache'); // statische Dateien: per ETag nachfragen
   return payload;
 });
 
@@ -93,6 +94,7 @@ await app.register(workshopRoutes);
 await app.register(financeRoutes);
 await app.register(staffRoutes);
 await app.register(adminRoutes);
+await app.register(extraRoutes);
 registerResources(app);
 
 await app.register(fstatic, { root: config.publicDir, prefix: '/', index: ['index.html'], cacheControl: false });

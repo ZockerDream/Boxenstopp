@@ -32,68 +32,167 @@
   }
   BX.missingQual = missingQual;
 
-  // ================= Dashboard =================
-  P.dashboard = function () {
+  // ================= Dashboard (anpassbar) =================
+  // Module: Reihenfolge, Breite (4/6/8/12 von 12 Spalten) und Ausblenden je Benutzer in users.ui.dashboard
+  const fin = () => lvl('invoices') >= 2 || lvl('accounts') >= 2 || lvl('reports') >= 1;
+  const DASH = {
+    kpis: { title: 'Kennzahlen', spans: [6, 8, 12], ok: () => true },
+    revenue: { title: 'Umsatz', spans: [4, 6, 8, 12], ok: () => (D.revenue90 || []).length > 0 },
+    duty: { title: 'Im Dienst', spans: [4, 6, 8, 12], ok: () => true },
+    todo: { title: 'Handlungsbedarf', spans: [4, 6, 8, 12], ok: () => true },
+    bays: { title: 'Heute auf den Bühnen', spans: [4, 6, 8, 12], ok: () => lvl('appointments') >= 1 },
+    callouts: { title: 'Offene Einsätze', spans: [4, 6, 8, 12], ok: () => lvl('callouts') >= 1 },
+    weekly: { title: 'Umsatz & Ausgaben je Woche', spans: [6, 8, 12], ok: () => (D.weekly26 || []).length > 0 },
+    orderStatus: { title: 'Aufträge nach Status', spans: [4, 6, 8, 12], ok: () => lvl('orders') >= 2 },
+    myOrders: { title: 'Meine Aufträge', spans: [4, 6, 8, 12], ok: () => lvl('orders') >= 1 },
+    fleet: { title: 'Fuhrpark', spans: [4, 6, 8, 12], ok: () => lvl('fleet') >= 1 && (D.fleet || []).length > 0 },
+    rules: { title: 'Regelwerk', spans: [4, 6, 8, 12], ok: () => (D.ruleDocs || []).length > 0 },
+    categories: { title: 'Umsatz nach Kategorie', spans: [4, 6, 8, 12], ok: () => fin() && lvl('orders') >= 2 },
+    stock: { title: 'Lager knapp', spans: [4, 6, 8, 12], ok: () => lvl('stock') >= 1 },
+    board: { title: 'Schwarzes Brett', spans: [4, 6, 8, 12], ok: () => (D.boardPosts || []).length > 0 },
+  };
+  const DEFAULT_LAYOUT = [['kpis', 12], ['revenue', 8], ['duty', 4], ['todo', 4], ['bays', 4], ['callouts', 4], ['weekly', 8], ['orderStatus', 4], ['fleet', 8], ['rules', 4], ['myOrders', 6], ['board', 6], ['categories', 4], ['stock', 4]];
+  const SPAN_LABELS = { 4: 'Schmal', 6: 'Halb', 8: 'Breit', 12: 'Ganz' };
+  function dashLayout() {
+    const usable = (id) => DASH[id] && DASH[id].ok();
+    const defaults = Object.fromEntries(DEFAULT_LAYOUT);
+    const saved = D.me.ui && D.me.ui.dashboard;
+    if (!saved) return { shown: DEFAULT_LAYOUT.filter(([id]) => usable(id)).map(([id, span]) => ({ id, span })), hidden: [] };
+    const order = (saved.order || []).filter(usable);
+    const hidden = (saved.hidden || []).filter((id) => usable(id) && !order.includes(id));
+    DEFAULT_LAYOUT.forEach(([id]) => { if (usable(id) && !order.includes(id) && !hidden.includes(id)) order.push(id); });
+    const fit = (id, sp) => (DASH[id].spans.includes(sp) ? sp : defaults[id]);
+    return { shown: order.map((id) => ({ id, span: fit(id, (saved.spans || {})[id] || defaults[id]) })), hidden };
+  }
+  const dashCurrent = () => { const l = dashLayout(); return { order: l.shown.map((m) => m.id), hidden: l.hidden, spans: Object.fromEntries(l.shown.map((m) => [m.id, m.span])) }; };
+  async function dashSave(dashboard) {
+    const before = D.me.ui;
+    D.me.ui = Object.assign({}, D.me.ui || {}, { dashboard });
+    if (!dashboard) delete D.me.ui.dashboard;
+    S().keepScroll = true; BX.render();
+    try { await BX.api('PATCH', '/api/me', { ui: D.me.ui }); } catch (e) { D.me.ui = before; BX.render(); BX.toast(e.message, 'bad'); }
+  }
+  const dashMove = (id, target, after) => {
+    const l = dashCurrent();
+    const order = l.order.filter((x) => x !== id);
+    let idx = target === null ? order.length : order.indexOf(target);
+    if (idx < 0) return;
+    if (after) idx += 1;
+    order.splice(idx, 0, id);
+    dashSave({ ...l, order });
+  };
+  Object.assign(A, {
+    'dash-edit': () => { S().dashEdit = !S().dashEdit; S().keepScroll = true; BX.render(); },
+    'dash-hide': (id) => { const l = dashCurrent(); dashSave({ order: l.order.filter((x) => x !== id), hidden: [...l.hidden, id], spans: l.spans }); },
+    'dash-add': (id) => { const l = dashCurrent(); dashSave({ order: [...l.order, id], hidden: l.hidden.filter((x) => x !== id), spans: l.spans }); },
+    'dash-span': (arg) => { const [id, sp] = arg.split(':'); const l = dashCurrent(); l.spans[id] = Number(sp); dashSave(l); },
+    'dash-step': (arg) => { const [id, dir] = arg.split(':'); const l = dashCurrent(); const i = l.order.indexOf(id); const j = i + (dir === 'l' ? -1 : 1); if (j < 0 || j >= l.order.length) return; [l.order[i], l.order[j]] = [l.order[j], l.order[i]]; dashSave(l); },
+    'dash-reset': () => BX.confirm('Dashboard zurücksetzen', 'Reihenfolge, Breiten und ausgeblendete Module gehen auf den Standard zurück.', 'Zurücksetzen', () => dashSave(null), false),
+  });
+  // Module per Ziehen verschieben (nur im Bearbeiten-Modus)
+  if (!BX._dashDnD) {
+    BX._dashDnD = true;
+    document.addEventListener('dragstart', (e) => { const m = e.target.closest && e.target.closest('.dash-grid.editing .dash-mod'); if (!m) return; e.dataTransfer.setData('text/plain', 'dash:' + m.dataset.mod); e.dataTransfer.effectAllowed = 'move'; m.classList.add('dragging'); });
+    document.addEventListener('dragover', (e) => { const m = e.target.closest && e.target.closest('.dash-grid.editing .dash-mod'); if (!m) return; e.preventDefault(); document.querySelectorAll('.dash-mod.drop-before,.dash-mod.drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after')); const r = m.getBoundingClientRect(); m.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-after' : 'drop-before'); });
+    document.addEventListener('dragend', () => document.querySelectorAll('.dash-mod').forEach((x) => x.classList.remove('dragging', 'drop-before', 'drop-after')));
+    document.addEventListener('drop', (e) => {
+      const m = e.target.closest && e.target.closest('.dash-grid.editing .dash-mod'); if (!m) return;
+      const data = e.dataTransfer.getData('text/plain'); if (!data.startsWith('dash:')) return;
+      e.preventDefault(); e.stopPropagation();
+      const id = data.slice(5); if (id === m.dataset.mod) return;
+      dashMove(id, m.dataset.mod, m.classList.contains('drop-after'));
+    }, true);
+  }
+
+  function dashBodies() {
     const openOrders = (D.orders || []).filter((o) => OPEN.includes(o.status));
     const openInv = (D.invoices || []).filter((i) => ['open', 'partial', 'overdue'].includes(i.status));
-    const openSum = openInv.reduce((s, i) => s + i.total - i.paid, 0);
     const accs = D.accounts || [];
     const cash = accs.filter((a) => a.kind !== 'tax_reserve' && a.balance !== null).reduce((s, a) => s + a.balance, 0);
     const reserveAcc = accs.find((a) => a.kind === 'tax_reserve');
-    const r14 = D.revenue14 || [];
-    const todayRev = r14.length ? r14[13].rev : 0, yday = r14.length ? r14[12].rev : 0;
-    const lowParts = (D.parts || []).filter((p) => p.active && p.stock < p.min);
-    const expiring = [];
-    Object.entries(D.certs || {}).forEach(([u, m]) => Object.entries(m).forEach(([t, until]) => {
-      const usr = U.user(u);
-      if (until && usr && usr.status !== 'left' && U.daysUntil(until) <= 30) expiring.push({ u, label: (U.training(t) || {}).name, until });
-    }));
-    (D.licenses || []).filter((l) => l.status === 'valid' && l.expires && U.daysUntil(l.expires) <= 30).forEach((l) => expiring.push({ u: l.user, label: (U.ltype(l.type) || {}).name, until: l.expires, firm: !l.user }));
+    const r90 = D.revenue90 || [];
+    const todayRev = r90.length ? r90[89].rev : 0, yday = r90.length ? r90[88].rev : 0;
     const openTaxDue = (D.taxPeriods || []).filter((p) => p.status !== 'filed').reduce((s, p) => s + p.tax, 0);
-    const ready = (D.taxPeriods || []).find((p) => p.status === 'ready' && p.tax > 0);
+    const list = (html, empty) => `<div class="list">${html || `<div class="empty">${empty}</div>`}</div>`;
+    return {
+      kpis: () => `<div class="grid g-6 kpi-grid">${[
+        fin() ? kpi('Umsatz heute', money(todayRev), `${todayRev >= yday ? '▲' : '▼'} ${money(Math.abs(todayRev - yday))} zu gestern`, { accent: true, dir: todayRev >= yday ? 'up' : 'down', icon: 'coins' }) : '',
+        (D.weekly26 || []).length ? kpi('Umsatz ' + D.weekly26[25].label, money(D.weekly26[25].rev), 'Zahlungseingänge', { icon: 'chart' }) : '',
+        lvl('orders') >= 1 ? kpi(lvl('orders') === 1 ? 'Meine Aufträge' : 'Offene Aufträge', openOrders.length, `${openOrders.filter((o) => o.status === 'done').length} fertig zur Abholung`, { icon: 'wrench' }) : '',
+        lvl('invoices') >= 2 ? kpi('Offene Rechnungen', money(openInv.reduce((s, i) => s + i.total - i.paid, 0)), `${openInv.length} Rechnungen · ${openInv.filter((i) => i.status === 'overdue').length} überfällig`, { icon: 'file', dir: 'down' }) : '',
+        accs.length && accs[0].balance !== null ? kpi('Kassenstand', money(cash), 'alle Konten ohne Rücklage', { icon: 'wallet' }) : '',
+        reserveAcc && reserveAcc.balance !== null ? kpi('Steuer-Rücklage', money(reserveAcc.balance), `Steuer offen: ${money(openTaxDue)}`, { icon: 'percent', dir: reserveAcc.balance >= openTaxDue ? 'up' : 'down' }) : '',
+        kpi('Im Dienst', Object.keys(D.onDuty).length, `von ${D.activeStaffCount} Mitarbeitern`, { icon: 'clock' }),
+        lvl('callouts') >= 1 ? kpi('Offene Einsätze', (D.callouts || []).filter((c) => ['open', 'en_route', 'on_site'].includes(c.status)).length, '', { icon: 'truck' }) : '',
+      ].filter(Boolean).slice(0, 6).join('')}</div>`,
+      revenue: () => {
+        const days = Number(U.chartRange('dashRev', 14));
+        const data = r90.slice(-days).map((d) => ({ label: U.shortDate(d.date), rev: d.rev, exp: d.exp }));
+        const sum = data.reduce((s, d) => s + d.rev, 0);
+        return { head: U.rangeSeg('dashRev', [[7, '7 T'], [14, '14 T'], [30, '30 T'], [90, '90 T']], days), sub: `${money(sum)} in ${days} Tagen`, html: U.areaChart(data, { id: 'dashRev', label: 'Umsatz', series: [{ key: 'rev', label: 'Umsatz', color: 'var(--accent)' }, { key: 'exp', label: 'Ausgaben', color: 'var(--info)' }] }) };
+      },
+      duty: () => ({ sub: `${Object.keys(D.onDuty).length} von ${D.activeStaffCount}`, flush: true, head: lvl('shifts') >= 1 ? `<a class="btn sm ghost" href="#/dienstplan">Dienstplan</a>` : '', html: list(Object.entries(D.onDuty).map(([u, since]) => { const x = U.user(u); return x ? `<div class="list-item">${avatar(x)}<div class="grow"><div class="title">${esc(x.name)}</div><div class="meta">${esc(x.rank ? U.rank(x.rank).name : '')} · seit ${esc(since)}</div></div>${badge('im Dienst', 'ok', true)}</div>` : ''; }).join(''), 'Gerade niemand im Dienst') }),
+      todo: () => {
+        const exp = [];
+        Object.entries(D.certs || {}).forEach(([u, m]) => Object.entries(m).forEach(([t, until]) => { const usr = U.user(u); if (until && usr && usr.status !== 'left' && U.daysUntil(until) <= 30) exp.push({ u, label: (U.training(t) || {}).name, until }); }));
+        (D.licenses || []).filter((l) => l.status === 'valid' && l.expires && U.daysUntil(l.expires) <= 30).forEach((l) => exp.push({ u: l.user, label: (U.ltype(l.type) || {}).name, until: l.expires, firm: !l.user }));
+        const ready = (D.taxPeriods || []).find((p) => p.status === 'ready' && p.tax > 0);
+        const fleetDue = (D.fleet || []).filter((f) => f.status !== 'retired' && ((f.serviceDue && U.daysUntil(f.serviceDue) <= 7) || (f.serviceKm && f.km >= f.serviceKm)));
+        const html = [
+          ...BX.openRules().map((d) => `<a class="list-item" href="#/regelwerk?doc=${d.id}"><span class="badge accent">Regelwerk</span><div class="grow"><div class="title">${esc(d.title)} bestätigen</div><div class="meta">Version ${d.version}</div></div></a>`),
+          ...(D.discountRequests || []).map((d) => { const o = U.byId(D.orders, d.order); const it = o && o.items.find((x) => x.id === d.item); return `<a class="list-item" href="#/auftrag/${d.order}"><span class="badge accent">Freigabe</span><div class="grow"><div class="title">Rabatt ${d.pct} % auf ${esc(o ? o.no : '')}</div><div class="meta">${esc(it ? it.name : '')} · ${esc((U.user(d.by) || {}).name || '')}</div></div></a>`; }),
+          ...openInv.filter((i) => i.status === 'overdue').slice(0, 3).map((i) => `<a class="list-item" href="#/rechnung/${i.id}"><span class="badge bad">Überfällig</span><div class="grow"><div class="title">${esc(i.no)} · ${money(i.total - i.paid)}</div><div class="meta">${esc((U.cust(i.customer) || {}).name || '')} · fällig ${date(i.due)}</div></div></a>`),
+          ...fleetDue.map((f) => `<a class="list-item" href="#/fuhrpark/${f.id}"><span class="badge warn">Fuhrpark</span><div class="grow"><div class="title">${esc(f.name)}: Service</div><div class="meta">${f.serviceDue ? 'fällig ' + date(f.serviceDue) : ''}${f.serviceKm ? ' · bei ' + f.serviceKm.toLocaleString('de-DE') + ' km' : ''}</div></div></a>`),
+          ...(D.parts || []).filter((p) => p.active && p.stock < p.min).map((p) => `<a class="list-item" href="#/lager"><span class="badge warn">Lager</span><div class="grow"><div class="title">${esc(p.name)}</div><div class="meta">Bestand ${p.stock} · Mindestbestand ${p.min}</div></div></a>`),
+          ...exp.sort((a, b) => (a.until < b.until ? -1 : 1)).slice(0, 5).map((e) => { const v = U.validity(e.until); return `<a class="list-item" href="#/${e.firm ? 'lizenzen?tab=firma' : 'qualifikationen'}"><span class="badge ${v.tone}">${e.firm ? 'Firma' : 'Nachweis'}</span><div class="grow"><div class="title">${esc(e.label)}${e.u ? ' · ' + esc((U.user(e.u) || {}).name || '') : ''}</div><div class="meta">${v.label}</div></div></a>`; }),
+          ready && lvl('tax') >= 2 ? `<a class="list-item" href="#/steuern"><span class="badge info">Steuern</span><div class="grow"><div class="title">${esc(ready.label)} bereit zur Abführung</div><div class="meta">${money(ready.tax)}</div></div></a>` : '',
+        ].join('');
+        return { flush: true, html: list(html, 'Alles erledigt 👍') };
+      },
+      bays: () => ({ flush: true, head: `<a class="btn sm ghost" href="#/termine">Termine</a>`, html: list((D.appointments || []).filter((a) => a.date === today()).map((a) => `<div class="list-item"><div class="grow"><div class="title">${esc(a.title)}</div><div class="meta">${esc((U.byId(D.bays, a.bay) || {}).name || '')} · ${esc(a.time)}${a.customer ? ' · ' + esc((U.cust(a.customer) || {}).name || '') : ''}</div></div>${a.order ? `<a class="btn sm" href="#/auftrag/${a.order}">Auftrag</a>` : ''}</div>`).join(''), 'Keine Termine heute') }),
+      callouts: () => ({ flush: true, head: `<a class="btn sm ghost" href="#/einsaetze">Alle</a>`, html: list((D.callouts || []).filter((c) => ['open', 'en_route', 'on_site'].includes(c.status)).map((c) => `<a class="list-item" href="#/einsaetze"><div class="grow"><div class="title">${esc(c.no)} · ${esc(c.loc)}</div><div class="meta">${esc(c.by)} · ${esc(c.at.slice(11))} Uhr${c.driver ? ' · ' + esc(U.user(c.driver).name) : ''}${c.fleet ? ' · ' + esc((U.byId(D.fleet, c.fleet) || {}).name || '') : ''}</div></div>${calloutBadge(c.status)}</a>`).join(''), 'Keine offenen Einsätze') }),
+      weekly: () => {
+        const n = Number(U.chartRange('dashWeek', 8));
+        const data = D.weekly26.slice(-n);
+        return { head: U.rangeSeg('dashWeek', [[8, '8 Wo'], [13, 'Quartal'], [26, 'Halbjahr']], n), sub: 'Klick auf eine Woche öffnet die Buchungen', html: U.barChart(data, { id: 'dashWeek', label: 'Umsatz und Ausgaben je Woche', series: [{ key: 'rev', label: 'Umsatz', color: 'var(--accent)' }, { key: 'exp', label: 'Ausgaben', color: 'var(--border-strong)' }], extraTip: (d) => 'Ergebnis: ' + money(d.rev - d.exp), href: lvl('accounts') >= 2 ? (d) => `#/buchungen?von=${d.from}&bis=${d.to}` : null }) };
+      },
+      orderStatus: () => {
+        const data = D.statuses.slice(0, 6).map(([k, l]) => ({ label: l, v: (D.orders || []).filter((o) => o.status === k).length, href: '#/auftraege?view=liste&status=' + k })).filter((d) => d.v);
+        return { html: data.length ? U.donut(data, { id: 'dashStatus', fmt: (v) => String(v), center: 'Aufträge', centerValue: String(data.reduce((s, d) => s + d.v, 0)), label: 'Aufträge nach Status' }) : '<div class="empty">Keine Aufträge</div>' };
+      },
+      myOrders: () => ({ flush: true, head: `<a class="btn sm ghost" href="#/auftraege?mine=1">Alle</a>`, html: list((D.orders || []).filter((o) => OPEN.includes(o.status) && o.assignees.includes(D.me.id)).slice(0, 8).map((o) => `<a class="list-item" href="#/auftrag/${o.id}"><span class="mono" style="font-size:12px">${esc(o.no)}</span>${plate((U.veh(o.vehicle) || {}).plate || '?')}<div class="grow" style="font-size:13px">${esc((U.veh(o.vehicle) || {}).model || '')}</div>${U.statusBadge(o.status)}</a>`).join(''), 'Keine offenen Aufträge für dich') }),
+      fleet: () => ({ head: `<a class="btn sm ghost" href="#/fuhrpark">Fuhrpark</a>`, html: `<div class="fleet-mini">${D.fleet.filter((f) => f.status !== 'retired').map((f) => `<a class="fleet-chip" href="#/fuhrpark/${f.id}">${BX.coverImg('fleet', f.id, f.modelId, 'thumb')}<div><b>${esc(f.name)}</b><div class="meta">${esc(f.plate)}</div>${BX.fleetBadge(f)}${f.driver ? `<div class="meta">${esc((U.user(f.driver) || {}).name || '')}</div>` : ''}</div></a>`).join('')}</div>` }),
+      rules: () => {
+        const open = BX.openRules();
+        return { flush: true, head: `<a class="btn sm ghost" href="#/regelwerk">Öffnen</a>`, html: list(D.ruleDocs.map((d) => { const ok = !d.requireAck || (D.myAcks[d.id] || 0) >= d.version; return `<a class="list-item" href="#/regelwerk?doc=${d.id}">${icon('id', 'width="16" height="16"')}<div class="grow"><div class="title">${esc(d.title)}</div><div class="meta">Version ${d.version} · ${date(d.updatedAt)}</div></div>${ok ? badge('bestätigt', 'ok', true) : badge('bitte lesen', 'accent', true)}</a>`; }).join(''), '') + (open.length ? '' : '') };
+      },
+      categories: () => {
+        const byCat = {};
+        (D.orders || []).filter((o) => ['invoiced', 'picked_up'].includes(o.status)).forEach((o) => o.items.forEach((l) => { const it = U.item(l.item); const k = it ? (U.cat(it.cat) || { name: 'Sonstiges' }).name : 'Freie Positionen'; byCat[k] = (byCat[k] || 0) + D.lineTotal(l); }));
+        const data = Object.entries(byCat).map(([label, v]) => ({ label, v })).sort((a, b) => b.v - a.v).slice(0, 7);
+        return { html: data.length ? U.donut(data, { id: 'dashCat', label: 'Umsatz nach Kategorie' }) : '<div class="empty">Noch keine Daten</div>' };
+      },
+      stock: () => ({ flush: true, head: `<a class="btn sm ghost" href="#/lager">Lager</a>`, html: list((D.parts || []).filter((p) => p.active && p.stock < p.min * 1.3).sort((a, b) => a.stock / Math.max(1, a.min) - b.stock / Math.max(1, b.min)).map((p) => `<div class="list-item"><div class="grow"><div class="title">${esc(p.name)}</div>${bar(Math.min(100, p.stock / Math.max(1, p.min * 2) * 100), p.stock < p.min ? 'bad' : 'warn')}</div><b class="num">${p.stock} / ${p.min}</b></div>`).join(''), 'Alles ausreichend vorrätig') }),
+      board: () => { const p = D.boardPosts[0]; return { head: `<a class="btn sm ghost" href="#/brett">Alle</a>`, html: `<div class="title" style="font-weight:600">${esc(p.title)}</div><p class="muted" style="margin-top:4px">${U.md(p.text)}</p><div class="row between"><small>${esc((U.user(p.author) || {}).name || '')} · ${date(p.date)}</small>${badge(`gelesen ${p.reads}/${D.activeStaffCount}`, 'info')}</div>` }; },
+    };
+  }
 
-    const todo = [
-      ...(D.discountRequests || []).map((d) => { const o = U.byId(D.orders, d.order); const it = o && o.items.find((x) => x.id === d.item); return `<a class="list-item" href="#/auftrag/${d.order}"><span class="badge accent">Freigabe</span><div class="grow"><div class="title">Rabatt ${d.pct} % auf ${esc(o ? o.no : '')}</div><div class="meta">${esc(it ? it.name : '')} · angefragt von ${esc((U.user(d.by) || {}).name || '')}</div></div></a>`; }),
-      ...openInv.filter((i) => i.status === 'overdue').slice(0, 3).map((i) => `<a class="list-item" href="#/rechnung/${i.id}"><span class="badge bad">Überfällig</span><div class="grow"><div class="title">${esc(i.no)} · ${money(i.total - i.paid)}</div><div class="meta">${esc((U.cust(i.customer) || {}).name || '')} · fällig ${date(i.due)}</div></div></a>`),
-      ...lowParts.map((p) => `<a class="list-item" href="#/lager"><span class="badge warn">Lager</span><div class="grow"><div class="title">${esc(p.name)}</div><div class="meta">Bestand ${p.stock} · Mindestbestand ${p.min}</div></div></a>`),
-      ...expiring.sort((a, b) => (a.until < b.until ? -1 : 1)).slice(0, 5).map((e) => { const v = U.validity(e.until); return `<a class="list-item" href="#/${e.firm ? 'lizenzen?tab=firma' : 'qualifikationen'}"><span class="badge ${v.tone}">${e.firm ? 'Firma' : 'Nachweis'}</span><div class="grow"><div class="title">${esc(e.label)}${e.u ? ' · ' + esc((U.user(e.u) || {}).name || '') : ''}</div><div class="meta">${v.label}</div></div></a>`; }),
-      ready && lvl('tax') >= 2 ? `<a class="list-item" href="#/steuern"><span class="badge info">Steuern</span><div class="grow"><div class="title">${esc(ready.label)} bereit zur Abführung</div><div class="meta">${money(ready.tax)}</div></div></a>` : '',
-    ].join('');
-
-    const statusCounts = D.statuses.slice(0, 6).map(([k, l, t]) => `<a href="#/auftraege" class="list-item"><span class="grow">${badge(l, t, true)}</span><b class="num">${(D.orders || []).filter((o) => o.status === k).length}</b></a>`).join('');
-    const duty = Object.entries(D.onDuty).map(([u, since]) => { const x = U.user(u); if (!x) return ''; return `<div class="list-item">${avatar(x)}<div class="grow"><div class="title">${esc(x.name)}</div><div class="meta">${esc(x.rank ? U.rank(x.rank).name : '')} · seit ${esc(since)}</div></div>${badge('im Dienst', 'ok', true)}</div>`; }).join('') || '<div class="empty">Gerade niemand im Dienst</div>';
-    const todayAppts = (D.appointments || []).filter((a) => a.date === today()).map((a) => `<div class="list-item"><div class="grow"><div class="title">${esc(a.title)}</div><div class="meta">${esc((U.byId(D.bays, a.bay) || {}).name || '')} · ${esc(a.time)}${a.customer ? ' · ' + esc((U.cust(a.customer) || {}).name || '') : ''}</div></div>${a.order ? `<a class="btn sm" href="#/auftrag/${a.order}">Auftrag</a>` : ''}</div>`).join('') || '<div class="empty">Keine Termine heute</div>';
-    const openCallouts = (D.callouts || []).filter((c) => ['open', 'en_route', 'on_site'].includes(c.status)).map((c) => `<a class="list-item" href="#/einsaetze"><div class="grow"><div class="title">${esc(c.no)} · ${esc(c.loc)}</div><div class="meta">${esc(c.by)} · ${esc(c.at.slice(11))} Uhr${c.driver ? ' · ' + esc(U.user(c.driver).name) : ''}</div></div>${calloutBadge(c.status)}</a>`).join('') || '<div class="empty">Keine offenen Einsätze</div>';
-    const post = (D.boardPosts || [])[0];
+  P.dashboard = function () {
+    const editing = !!S().dashEdit;
+    const { shown, hidden } = dashLayout();
+    const bodies = dashBodies();
     const hour = Number(new Date().toLocaleString('de-DE', { hour: '2-digit', hour12: false }));
     const greet = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend';
-    const kpis = [
-      lvl('invoices') >= 2 || lvl('accounts') >= 2 ? kpi('Umsatz heute', money(todayRev), `${todayRev >= yday ? '▲' : '▼'} ${money(Math.abs(todayRev - yday))} zu gestern`, { accent: true, dir: todayRev >= yday ? 'up' : 'down', icon: 'coins' }) : '',
-      (D.weekly8 || []).length ? kpi('Umsatz ' + D.weekly8[7].label, money(D.weekly8[7].rev), 'Zahlungseingänge', { icon: 'chart' }) : '',
-      lvl('orders') >= 1 ? kpi(lvl('orders') === 1 ? 'Meine Aufträge' : 'Offene Aufträge', openOrders.length, `${openOrders.filter((o) => o.status === 'done').length} fertig zur Abholung`, { icon: 'wrench' }) : '',
-      lvl('invoices') >= 2 ? kpi('Offene Rechnungen', money(openSum), `${openInv.length} Rechnungen · ${openInv.filter((i) => i.status === 'overdue').length} überfällig`, { icon: 'file', dir: 'down' }) : '',
-      accs.length && accs[0].balance !== null ? kpi('Kassenstand', money(cash), 'alle Konten ohne Rücklage', { icon: 'wallet' }) : '',
-      reserveAcc && reserveAcc.balance !== null ? kpi('Steuer-Rücklage', money(reserveAcc.balance), `Steuer offen: ${money(openTaxDue)}`, { icon: 'percent', dir: reserveAcc.balance >= openTaxDue ? 'up' : 'down' }) : '',
-      lvl('callouts') >= 1 ? kpi('Offene Einsätze', (D.callouts || []).filter((c) => ['open', 'en_route', 'on_site'].includes(c.status)).length, '', { icon: 'truck' }) : '',
-      kpi('Im Dienst', Object.keys(D.onDuty).length, `von ${D.activeStaffCount} Mitarbeitern`, { icon: 'clock' }),
-    ].filter(Boolean).slice(0, 6).join('');
-    return pageHead(`${greet}, ${esc(me().name.split(' ')[0])}`, `${U.weekday(today())}, ${date(today())} · ${esc(D.firm.name)}`, (lvl('orders') >= 3 ? btn('Neuer Auftrag', { cls: 'primary', icon: 'plus', action: 'new-order' }) : '') + (lvl('callouts') >= 3 ? btn('Neuer Einsatz', { icon: 'truck', action: 'new-callout' }) : '')) +
-      `<div class="grid g-6">${kpis}</div>
-      <div class="grid g-3 mt">
-        <div class="span-2">${r14.length ? card('Umsatz', U.areaChart(r14.map((d) => ({ label: U.shortDate(d.date), v: d.rev })), { label: 'Umsatz der letzten 14 Tage' }), { sub: 'Zahlungseingänge, letzte 14 Tage' }) : card('Meine Aufträge', `<div class="list">${openOrders.slice(0, 8).map((o) => `<a class="list-item" href="#/auftrag/${o.id}"><span class="mono">${esc(o.no)}</span>${plate(U.veh(o.vehicle).plate)}<div class="grow">${esc(U.veh(o.vehicle).make)} ${esc(U.veh(o.vehicle).model)}</div>${U.statusBadge(o.status)}</a>`).join('') || '<div class="empty">Keine offenen Aufträge</div>'}</div>`, { flush: true })}</div>
-        ${card('Im Dienst', `<div class="list">${duty}</div>`, { flush: true, sub: Object.keys(D.onDuty).length + ' von ' + D.activeStaffCount, actions: lvl('shifts') >= 1 ? `<a class="btn sm ghost" href="#/dienstplan">Dienstplan</a>` : '' })}
-      </div>
-      <div class="grid g-3 mt">
-        ${card('Handlungsbedarf', `<div class="list">${todo || '<div class="empty">Alles erledigt 👍</div>'}</div>`, { flush: true })}
-        <div class="stack">
-          ${lvl('appointments') >= 1 ? card('Heute auf den Bühnen', `<div class="list">${todayAppts}</div>`, { flush: true, actions: `<a class="btn sm ghost" href="#/termine">Termine</a>` }) : ''}
-          ${lvl('callouts') >= 1 ? card('Offene Einsätze', `<div class="list">${openCallouts}</div>`, { flush: true, actions: `<a class="btn sm ghost" href="#/einsaetze">Alle</a>` }) : ''}
-        </div>
-        <div class="stack">
-          ${lvl('orders') >= 2 ? card('Aufträge nach Status', `<div class="list">${statusCounts}</div>`, { flush: true }) : ''}
-          ${post ? card('Schwarzes Brett', `<div class="title" style="font-weight:600">${esc(post.title)}</div><p class="muted" style="margin-top:4px">${U.md(post.text)}</p><div class="row between"><small>${esc((U.user(post.author) || {}).name || '')} · ${date(post.date)}</small>${badge(`gelesen ${post.reads}/${D.activeStaffCount}`, 'info')}</div>`, { actions: `<a class="btn sm ghost" href="#/brett">Alle</a>` }) : ''}
-        </div>
-      </div>`;
+    const mods = shown.map(({ id, span }, i) => {
+      let b = bodies[id]();
+      if (typeof b === 'string') b = { html: b };
+      const tools = editing ? `<div class="dash-tools"><span class="grip" title="Ziehen zum Verschieben">${icon('grid', 'width="14" height="14"')}</span><button class="btn sm ghost" ${i === 0 ? 'disabled' : ''} data-action="dash-step" data-arg="${id}:l" title="Nach vorne">‹</button><button class="btn sm ghost" ${i === shown.length - 1 ? 'disabled' : ''} data-action="dash-step" data-arg="${id}:r" title="Nach hinten">›</button><div class="seg seg-sm">${DASH[id].spans.map((sp) => `<button type="button" class="${sp === span ? 'active' : ''}" data-action="dash-span" data-arg="${id}:${sp}" title="${SPAN_LABELS[sp]}">${sp}</button>`).join('')}</div><button class="btn sm ghost" data-action="dash-hide" data-arg="${id}" title="Ausblenden">${icon('x', 'width="14" height="14"')}</button></div>` : '';
+      const inner = id === 'kpis' ? b.html : card(esc(DASH[id].title), b.html, { flush: b.flush, sub: b.sub, actions: b.head || '' });
+      return `<section class="dash-mod" data-mod="${id}" style="--span:${span}" ${editing ? 'draggable="true"' : ''}>${tools}${inner}</section>`;
+    }).join('');
+    const tray = editing ? `<div class="card dash-tray mb"><div class="grow"><b>Dashboard anpassen</b><div class="muted" style="font-size:12px">Module ziehen oder mit ‹ › verschieben, Breite wählen (4 = schmal … 12 = ganze Breite), mit ✕ ausblenden. Wird sofort für dich gespeichert.</div></div><div class="chips">${hidden.map((id) => `<button type="button" class="btn sm" data-action="dash-add" data-arg="${id}">${icon('plus', 'width="14" height="14"')}${esc(DASH[id].title)}</button>`).join('') || '<span class="faint" style="font-size:12px">Keine ausgeblendeten Module</span>'}</div><div class="row">${btn('Standard', { cls: 'sm ghost', action: 'dash-reset' })}${btn('Fertig', { cls: 'sm primary', icon: 'check', action: 'dash-edit' })}</div></div>` : '';
+    return pageHead(`${greet}, ${esc(me().name.split(' ')[0])}`, `${U.weekday(today())}, ${date(today())} · ${esc(D.firm.name)}`, (lvl('orders') >= 3 ? btn('Neuer Auftrag', { cls: 'primary', icon: 'plus', action: 'new-order' }) : '') + (lvl('callouts') >= 3 ? btn('Neuer Einsatz', { icon: 'truck', action: 'new-callout' }) : '') + btn(editing ? 'Fertig' : 'Anpassen', { cls: editing ? 'primary' : '', icon: 'gear', action: 'dash-edit' })) +
+      tray + `<div class="dash-grid ${editing ? 'editing' : ''}">${mods || '<div class="empty">Alle Module sind ausgeblendet. Unter „Anpassen“ kannst du sie wieder hinzufügen.</div>'}</div>`;
   };
 
   // ================= Aufträge =================
@@ -113,6 +212,7 @@
     const own = lvl('orders') === 1 || q.mine === '1';
     let list = D.orders.slice();
     if (own) list = list.filter((o) => o.assignees.includes(D.me.id));
+    if (q.status) list = list.filter((o) => o.status === q.status);
     const seg = `<div class="seg"><a href="#/auftraege?view=board${q.mine ? '&mine=1' : ''}" class="${view === 'board' ? 'active' : ''}">Board</a><a href="#/auftraege?view=liste${q.mine ? '&mine=1' : ''}" class="${view === 'liste' ? 'active' : ''}">Liste</a></div>`;
     const mine = lvl('orders') > 1 ? `<div class="seg"><a href="#/auftraege?view=${view}" class="${!q.mine ? 'active' : ''}">Alle</a><a href="#/auftraege?view=${view}&mine=1" class="${q.mine ? 'active' : ''}">Meine</a></div>` : '';
     const head = pageHead('Aufträge', lvl('orders') === 1 ? 'Du siehst nur Aufträge, an denen du arbeitest (Stufe „Eigene“).' : 'Ziehe Karten in eine andere Spalte, um den Status zu ändern.', seg + mine + (lvl('orders') >= 3 ? btn('Neuer Auftrag', { cls: 'primary', icon: 'plus', action: 'new-order' }) : ''));
@@ -121,7 +221,7 @@
         const v = U.veh(o.vehicle) || {}, c = U.cust(o.customer) || {};
         return { _href: '#/auftrag/' + o.id, _dim: ['cancelled', 'rejected'].includes(o.status), _filter: [o.no, v.plate, v.make, v.model, c.name].join(' '), no: `<span class="mono">${esc(o.no)}</span>`, veh: `${plate(v.plate || '?')} <span class="sub">${esc(v.make || '')} ${esc(v.model || '')}</span>`, cust: esc(c.name || ''), status: U.statusBadge(o.status), team: `<span class="avatars">${o.assignees.map((a) => avatar(U.user(a), 'sm')).join('')}</span>`, created: date(o.created), due: date(o.due), total: money(D.orderTotal(o)) };
       });
-      return head + card('', `<div class="row mb"><input class="input" style="max-width:320px" placeholder="Suchen: Nummer, Kennzeichen, Kunde …" data-action="filter" data-target="#orderTable"></div>` + table([
+      return head + (q.status ? `<div class="mb">${note(`Gefiltert: <b>${esc(U.statusMeta(q.status).label)}</b> · <a class="link" href="#/auftraege?view=liste">alle zeigen</a>`, 'info')}</div>` : '') + card('', `<div class="row mb"><input class="input" style="max-width:320px" placeholder="Suchen: Nummer, Kennzeichen, Kunde …" data-action="filter" data-target="#orderTable"></div>` + table([
         { key: 'no', label: 'Nummer' }, { key: 'veh', label: 'Fahrzeug' }, { key: 'cust', label: 'Kunde' }, { key: 'status', label: 'Status' }, { key: 'team', label: 'Bearbeiter' }, { key: 'created', label: 'Angelegt' }, { key: 'due', label: 'Fertig bis' }, { key: 'total', label: 'Summe', num: true },
       ], rows, { id: 'orderTable', empty: 'Noch keine Aufträge' }));
     }
@@ -146,6 +246,7 @@
         ${U.field('Kennzeichen', `<input class="input mono" name="plate" id="plateInput" placeholder="z. B. DF 4207" data-input="plate-lookup" autocomplete="off" style="font-size:18px;letter-spacing:.06em" value="${esc(pre ? pre.plate : '')}" required>`, { hint: 'Tippen genügt – Fahrzeug, Halter, Klasse und Preisgruppe werden übernommen.' })}
         <div id="plateResult"></div>
         <div id="newVehicle" class="form cols-2 hidden">
+          ${U.field('Modell aus dem Katalog', U.select([['', '– frei eingeben –']].concat((D.models || []).filter((m) => m.active).map((m) => [m.id, m.make + ' ' + m.model])), '', 'name="modelId"'), { full: true })}
           ${U.field('Hersteller', U.input('', { attrs: 'name="make"' }))}${U.field('Modell', U.input('', { attrs: 'name="model"' }))}
           ${U.field('Fahrzeugklasse', U.select(D.vehicleClasses.map((c) => [c.id, c.name]), D.vehicleClasses[1] && D.vehicleClasses[1].id, 'name="cls"'))}${U.field('Farbe', U.input('', { attrs: 'name="color"' }))}
           ${U.field('Halter (bestehender Kunde)', U.select([['', '– neuer Kunde –']].concat(custOpts()), '', 'name="owner"'))}${U.field('… oder neuer Kunde', U.input('', { attrs: 'name="ownerName"', ph: 'Name des neuen Kunden' }))}
@@ -190,7 +291,8 @@
     if (card2) body.vehicle = card2.dataset.vehicle;
     else {
       if (!v.plate) { document.getElementById('modalErr').innerHTML = note('Kennzeichen fehlt.', 'bad'); return; }
-      body.newVehicle = { plate: v.plate, make: v.make, model: v.model, cls: v.cls || null, color: v.color };
+      const mm = (D.models || []).find((x) => x.id === v.modelId);
+      body.newVehicle = { plate: v.plate, make: mm ? mm.make : v.make, model: mm ? mm.model : v.model, cls: mm && mm.cls ? mm.cls : (v.cls || null), color: v.color, modelId: v.modelId || null };
       if (v.owner) body.newVehicle.owner = v.owner; else body.newVehicle.ownerName = v.ownerName;
     }
     btnEl.disabled = true;
@@ -359,7 +461,7 @@
       const final = c.invoice || c.order || c.status === 'cancelled';
       return {
         _dim: c.status === 'cancelled', no: `<span class="mono">${esc(c.no)}</span>`, at: date(c.at), loc: `${icon('pin', 'width="12" height="12"')} ${esc(c.loc)}`, by: `${esc(c.by)}<span class="sub">${esc((U.cust(c.customer) || {}).name || '')}</span>`,
-        veh: v ? plate(v.plate) : '<span class="faint">–</span>',
+        veh: (v ? plate(v.plate) : '<span class="faint">–</span>') + (c.fleet ? `<span class="sub">${icon('truck', 'width="11" height="11"')} ${esc((U.byId(D.fleet || [], c.fleet) || {}).name || '')}</span>` : ''),
         driver: canW && !final ? U.select([['', '– zuweisen –']].concat(drivers.map((s) => [s.id, s.name])), c.driver || '', `data-change="callout-driver" data-id="${c.id}" style="min-width:140px"`) : c.driver ? person(U.user(c.driver)) : '–',
         status: canW && !final ? U.select(Object.entries(CS).map(([k, [l]]) => [k, l]), c.status, `data-change="callout-status" data-id="${c.id}"`) : calloutBadge(c.status), fee: c.fee ? money(c.fee) : '–',
         act: c.order ? `<a class="btn sm" href="#/auftrag/${c.order}">Auftrag</a>` : inv ? `<a class="btn sm" href="#/rechnung/${inv.id}">${esc(inv.no)}</a>` : c.invoice ? badge('abgerechnet', 'ok') : canW && c.status !== 'cancelled' ? `<div class="row" style="gap:4px;flex-wrap:nowrap">${lvl('invoices') >= 3 ? btn('Abrechnen', { cls: 'sm', action: 'callout-invoice', arg: c.id }) : ''}${lvl('orders') >= 3 ? btn('→ Auftrag', { cls: 'sm', action: 'callout-order', arg: c.id }) : ''}${btn('', { cls: 'sm ghost', icon: 'gear', action: 'callout-edit', arg: c.id, title: 'Fahrzeug / Gebühr' })}</div>` : '',
@@ -374,8 +476,9 @@
     { name: 'location', label: 'Ort', required: true, full: true, ph: 'z. B. Autobahnauffahrt Nord, km 12' }, { name: 'by', label: 'Auftraggeber', type: 'select', options: ['Kunde', 'Polizeidepartment', 'Rettungsdienst', 'Eigen'], value: 'Kunde' },
     { name: 'customer', label: 'Kunde (für die Rechnung)', type: 'select', options: [['', '–']].concat(custOpts()) }, { name: 'vehicle', label: 'Fahrzeug (falls bekannt)', type: 'select', options: [['', '–']].concat(vehOpts()) },
     { name: 'driver', label: 'Fahrer', type: 'select', options: [['', '– später –']].concat(activeStaff().filter((s) => s.status === 'active').map((s) => [s.id, s.name])) },
+    ...((D.fleet || []).length ? [{ name: 'fleet', label: 'Firmenfahrzeug', type: 'select', options: [['', '–']].concat(D.fleet.filter((f) => f.status !== 'retired').map((f) => [f.id, `${f.name} (${f.plate})${f.status !== 'available' ? ' · ' + (f.status === 'in_use' ? 'im Einsatz' : 'Werkstatt') : ''}`])), value: (D.fleet.find((f) => f.status === 'available' && /abschlepp/i.test(f.kind)) || {}).id || '' }] : []),
     { name: 'item', label: 'Leistung', type: 'select', options: D.catalog.filter((i) => i.active && D.categories.find((c) => c.id === i.cat && /abschlepp|einsatz/i.test(c.name))).map((i) => [i.id, i.name + ' – ' + money(i.price)]).concat(D.catalog.filter((i) => i.active && !D.categories.find((c) => c.id === i.cat && /abschlepp|einsatz/i.test(c.name))).map((i) => [i.id, i.name])), full: true },
-  ], submit: async (v) => { ['customer', 'vehicle', 'driver', 'item'].forEach((k) => { v[k] = v[k] || null; }); await BX.api('POST', '/api/callouts', v); return 'Einsatz angelegt'; } });
+  ], submit: async (v) => { ['customer', 'vehicle', 'driver', 'item', 'fleet'].forEach((k) => { v[k] = v[k] || null; }); await BX.api('POST', '/api/callouts', v); return 'Einsatz angelegt'; } });
   A['callout-driver'] = (val, el) => BX.call('PATCH', '/api/callouts/' + el.dataset.id, { driver: val || null, ...(val ? { status: 'en_route' } : {}) }, 'Fahrer zugewiesen');
   A['callout-status'] = (val, el) => BX.call('PATCH', '/api/callouts/' + el.dataset.id, { status: val }, 'Status geändert');
   A['callout-invoice'] = (id) => BX.confirm('Einsatz abrechnen', 'Es wird eine Rechnung mit der Einsatzgebühr erstellt.', 'Abrechnen', async () => { const r = await BX.call('POST', `/api/callouts/${id}/invoice`, {}, (x) => `Rechnung ${x.invoice.no} erstellt`); if (r) location.hash = '#/rechnung/' + r.invoice.id; }, false);
@@ -437,13 +540,14 @@
   // ================= Fahrzeuge =================
   function vehStatus(s) { return s === 'active' ? badge('Aktiv', 'ok', true) : s === 'stolen' ? badge('Gestohlen gemeldet', 'bad', true) : badge('Verschrottet', '', true); }
   const vehFields = (v = {}) => [
+    { name: 'modelId', label: 'Modell aus dem Fahrzeug-Katalog', type: 'select', options: [['', '– frei eingeben –']].concat((D.models || []).filter((m) => m.active || m.id === v.modelId).map((m) => [m.id, `${m.make} ${m.model}`])), value: v.modelId || '', full: true, hint: 'füllt Hersteller, Modell und Klasse' },
     { name: 'plate', label: 'Kennzeichen', value: v.plate, required: true, mono: true }, { name: 'owner', label: 'Halter', type: 'select', options: [['', '–']].concat(custOpts()), value: v.owner || '' },
     { name: 'make', label: 'Hersteller', value: v.make }, { name: 'model', label: 'Modell', value: v.model },
     { name: 'cls', label: 'Fahrzeugklasse', type: 'select', options: D.vehicleClasses.map((c) => [c.id, c.name]), value: v.cls }, { name: 'color', label: 'Farbe', value: v.color },
     { name: 'km', label: 'Kilometerstand', type: 'number', value: v.km ?? 0 }, { name: 'vin', label: 'Fahrgestellnummer', value: v.vin },
     ...(v.id ? [{ name: 'status', label: 'Status', type: 'select', options: [['active', 'Aktiv'], ['stolen', 'Gestohlen gemeldet'], ['scrapped', 'Verschrottet']], value: v.status }] : []),
   ];
-  const vehBody = (v) => ({ ...v, owner: v.owner || null, cls: v.cls || null, km: v.km || 0 });
+  const vehBody = (v) => { const m = (D.models || []).find((x) => x.id === v.modelId); return { ...v, modelId: v.modelId || null, make: m ? m.make : v.make, model: m ? m.model : v.model, cls: m && m.cls ? m.cls : (v.cls || null), owner: v.owner || null, km: v.km || 0 }; };
   A['new-vehicle'] = (owner) => BX.form({ title: 'Neues Fahrzeug', fields: vehFields({ owner }), submit: async (v) => { const r = await BX.api('POST', '/api/r/vehicles', vehBody(v)); setTimeout(() => { location.hash = '#/fahrzeug/' + r.id; }); return 'Fahrzeug angelegt'; } });
   A['edit-vehicle'] = (id) => BX.form({ title: 'Fahrzeug bearbeiten', fields: vehFields(U.veh(id)), intro: note('Ein anderer Halter wird als Halterwechsel in der Historie vermerkt.', 'info'), submit: async (v) => { await BX.api('PATCH', '/api/r/vehicles/' + id, vehBody(v)); return 'Gespeichert'; } });
   const TUNING = ['Motor', 'Turbo', 'Bremsen', 'Getriebe', 'Federung', 'Panzerung', 'Optik'];
@@ -486,6 +590,7 @@
     }
     return pageHead(`${plate(v.plate, true)} <span style="margin-left:6px">${esc(v.make)} ${esc(v.model)}</span>`, `${esc(clsName(v.cls))} · ${esc(v.color)} · ${Number(v.km).toLocaleString('de-DE')} km${v.vin ? ' · FIN ' + esc(v.vin) : ''} · Halter ${c.id ? `<a class="link" href="#/kunde/${c.id}">${esc(c.name)}</a>` : '–'}`,
       vehStatus(v.status) + (lvl('vehicles') >= 3 ? btn('Bearbeiten / Halterwechsel', { icon: 'gear', action: 'edit-vehicle', arg: v.id }) : '') + (lvl('orders') >= 3 && v.status !== 'scrapped' ? btn('Neuer Auftrag', { cls: 'primary', icon: 'plus', action: 'new-order', arg: v.id }) : ''), `<a href="#/fahrzeuge">Fahrzeuge</a> / ${esc(v.plate)}`) +
+      (v.modelId && BX.coverImg ? `<div class="veh-hero mb"><a href="#/modell/${v.modelId}">${BX.coverImg('model', v.modelId, null, 'veh-hero-img')}</a><div><div class="muted" style="font-size:12px">Modell aus dem Katalog</div><a class="link" href="#/modell/${v.modelId}"><b>${esc(v.make)} ${esc(v.model)}</b></a>${lvl('tuning') >= 1 && lvl('orders') >= 3 ? `<div class="mt"><a class="btn sm" href="#/tuning?v=${v.id}">${icon('gauge')}Tuning konfigurieren</a></div>` : ''}</div></div>` : '') +
       U.tabs(base, [['historie', 'Historie'], ['tuning', 'Tuning-Stand'], ['zustand', 'Zustand'], ['garantie', 'Garantie']], tab) + body;
   };
 

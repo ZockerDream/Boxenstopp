@@ -42,6 +42,7 @@
     ['orders', 'Aufträge'], ['appointments', 'Termine'], ['callouts', 'Einsätze'], ['catalog', 'Preisliste'], ['stock', 'Lager'],
     ['invoices', 'Rechnungen'], ['accounts', 'Konten & Buchungen'], ['tax', 'Steuern'], ['payroll', 'Lohn & Provision'], ['reports', 'Berichte'],
     ['shifts', 'Dienstplan'], ['trainings', 'Schulungen'], ['licenses', 'Lizenzen'], ['stafffiles', 'Personalakten'], ['board', 'Schwarzes Brett'], ['settings', 'Firmen-Einstellungen'],
+    ['fleet', 'Fuhrpark'], ['models', 'Fahrzeug-Katalog'], ['tuning', 'Tuning'], ['rules', 'Regelwerk'],
   ];
   BX.JOB_LABELS = {
     'recurring.run': ['Daueraufträge buchen', 'stündlich'], 'reminders.daily': ['Erinnerungen (Nachweise, Lizenzen, Rechnungen)', 'täglich 06:00'], 'stock.check': ['Mindestbestand prüfen', 'täglich 05:00'],

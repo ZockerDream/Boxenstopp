@@ -58,7 +58,7 @@ export default async function workshopRoutes(app) {
     req.need('orders', 3);
     const b = z.object({
       vehicle: uuid.optional(),
-      newVehicle: z.object({ plate: z.string().trim().min(2).max(16), make: z.string().max(60).default(''), model: z.string().max(60).default(''), cls: uuid.nullable().optional(), color: z.string().max(40).default(''), owner: uuid.optional(), ownerName: z.string().trim().max(120).optional() }).optional(),
+      newVehicle: z.object({ plate: z.string().trim().min(2).max(16), make: z.string().max(60).default(''), model: z.string().max(60).default(''), cls: uuid.nullable().optional(), color: z.string().max(40).default(''), owner: uuid.optional(), ownerName: z.string().trim().max(120).optional(), modelId: uuid.nullable().optional() }).optional(),
       request: z.string().max(2000).default(''), mileage: z.coerce.number().int().min(0).max(9999999).default(0),
       due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), bay: uuid.nullable().optional(),
       assignees: z.array(uuid).max(6).default([]), status: z.enum(['quote', 'accepted']).default('accepted'),
@@ -80,7 +80,7 @@ export default async function workshopRoutes(app) {
             const pg = await c.one('SELECT id FROM price_groups WHERE is_default ORDER BY name LIMIT 1');
             owner = (await c.one('INSERT INTO customers (name, price_group_id) VALUES ($1, $2) RETURNING id', [nv.ownerName, pg && pg.id])).id;
           }
-          const v = await c.one('INSERT INTO vehicles (plate, make, model, class_id, color, km, owner_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [plate, nv.make, nv.model, nv.cls || null, nv.color, b.mileage, owner]);
+          const v = await c.one('INSERT INTO vehicles (plate, make, model, class_id, color, km, owner_id, model_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [plate, nv.make, nv.model, nv.cls || null, nv.color, b.mileage, owner, nv.modelId || null]);
           await c.query('INSERT INTO vehicle_owner_history (vehicle_id, customer_id) VALUES ($1, $2)', [v.id, owner]);
           vehicleId = v.id;
         }
@@ -280,14 +280,14 @@ export default async function workshopRoutes(app) {
   // ---------- Einsätze ----------
   app.post('/api/callouts', async (req) => {
     req.need('callouts', 3);
-    const b = z.object({ location: z.string().trim().min(2).max(160), by: z.string().trim().max(80).default('Kunde'), customer: uuid.nullable().optional(), vehicle: uuid.nullable().optional(), driver: uuid.nullable().optional(), item: uuid.nullable().optional() }).parse(req.body || {});
+    const b = z.object({ location: z.string().trim().min(2).max(160), by: z.string().trim().max(80).default('Kunde'), customer: uuid.nullable().optional(), vehicle: uuid.nullable().optional(), driver: uuid.nullable().optional(), item: uuid.nullable().optional(), fleet: uuid.nullable().optional() }).parse(req.body || {});
     return tx(async (c) => {
       const no = await nextNumber(c, 'callout');
       const it = b.item ? await c.one('SELECT * FROM catalog_items WHERE id = $1', [b.item]) : null;
       let fee = it ? Number(it.price) : 0;
       if (it && b.vehicle) { const v = await c.one('SELECT class_id FROM vehicles WHERE id = $1', [b.vehicle]); if (v) fee = unitPrice(it, v.class_id); }
-      const r = await c.one(`INSERT INTO callouts (no, location, requested_by, customer_id, vehicle_id, driver_id, fee, catalog_item_id, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-        [no, b.location, b.by, b.customer || null, b.vehicle || null, b.driver || null, fee, b.item || null, b.driver ? 'en_route' : 'open']);
+      const r = await c.one(`INSERT INTO callouts (no, location, requested_by, customer_id, vehicle_id, driver_id, fee, catalog_item_id, status, fleet_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [no, b.location, b.by, b.customer || null, b.vehicle || null, b.driver || null, fee, b.item || null, b.driver ? 'en_route' : 'open', b.fleet || null]);
       await audit(req, 'Einsätze', 'Angelegt', `${no} · ${b.location}`, c);
       fireWebhooks('Einsatz neu', `${no} · ${b.location} · ${b.by}`);
       const drivers = await c.q(`SELECT gm.user_id FROM group_members gm JOIN groups g ON g.id = gm.group_id WHERE g.name ILIKE '%abschlepp%'`);
@@ -297,12 +297,13 @@ export default async function workshopRoutes(app) {
   });
   app.patch('/api/callouts/:id', async (req) => {
     req.need('callouts', 3);
-    const b = z.object({ status: z.enum(['open', 'en_route', 'on_site', 'done', 'cancelled']).optional(), driver: uuid.nullable().optional(), vehicle: uuid.nullable().optional(), fee: z.coerce.number().min(0).max(1e7).optional() }).strict().parse(req.body || {});
+    const b = z.object({ status: z.enum(['open', 'en_route', 'on_site', 'done', 'cancelled']).optional(), driver: uuid.nullable().optional(), vehicle: uuid.nullable().optional(), fee: z.coerce.number().min(0).max(1e7).optional(), fleet: uuid.nullable().optional() }).strict().parse(req.body || {});
     const co = await one('SELECT * FROM callouts WHERE id = $1', [req.params.id]) || fail(404, 'Einsatz nicht gefunden');
     if (co.invoice_id) fail(409, 'Der Einsatz ist abgerechnet.');
     if (b.fee !== undefined && !req.flag('auftrag.preis_aendern')) fail(403, 'Gebühr ändern braucht „Vom Preis abweichen“.');
-    await q(`UPDATE callouts SET status = coalesce($2, status), driver_id = CASE WHEN $3::boolean THEN $4::uuid ELSE driver_id END, vehicle_id = CASE WHEN $5::boolean THEN $6::uuid ELSE vehicle_id END, fee = coalesce($7, fee) WHERE id = $1`,
-      [co.id, b.status ?? null, 'driver' in b, b.driver ?? null, 'vehicle' in b, b.vehicle ?? null, b.fee ?? null]);
+    await q(`UPDATE callouts SET status = coalesce($2, status), driver_id = CASE WHEN $3::boolean THEN $4::uuid ELSE driver_id END, vehicle_id = CASE WHEN $5::boolean THEN $6::uuid ELSE vehicle_id END, fee = coalesce($7, fee),
+             fleet_id = CASE WHEN $8::boolean THEN $9::uuid ELSE fleet_id END WHERE id = $1`,
+      [co.id, b.status ?? null, 'driver' in b, b.driver ?? null, 'vehicle' in b, b.vehicle ?? null, b.fee ?? null, 'fleet' in b, b.fleet ?? null]);
     await audit(req, 'Einsätze', 'Geändert', `${co.no}${b.status ? ' · ' + b.status : ''}`);
     return { ok: true };
   });

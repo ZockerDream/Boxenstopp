@@ -7,20 +7,20 @@
   const P = BX.pages;
   const L = BX.look;
   const { esc, icon, money } = U;
-  const S = (BX.state = { orderView: 'board', plClass: null, weekOffset: 0, auth: null });
+  const S = (BX.state = { orderView: 'board', plClass: null, weekOffset: 0, auth: null, chartHidden: {}, chartRange: {} });
   const A = (BX.actions = BX.actions || {});
 
   // ---------- Navigation ----------
   const NAV = [
-    ['Werkstatt', [['dashboard', 'Dashboard', 'dash'], ['auftraege', 'Aufträge', 'wrench', 'orders'], ['termine', 'Termine', 'cal', 'appointments'], ['einsaetze', 'Einsätze', 'truck', 'callouts']]],
-    ['Kunden', [['kunden', 'Kunden', 'users', 'customers'], ['fahrzeuge', 'Fahrzeuge', 'car', 'vehicles']]],
+    ['Werkstatt', [['dashboard', 'Dashboard', 'dash'], ['auftraege', 'Aufträge', 'wrench', 'orders'], ['tuning', 'Tuning', 'gauge', 'tuning'], ['termine', 'Termine', 'cal', 'appointments'], ['einsaetze', 'Einsätze', 'truck', 'callouts'], ['fuhrpark', 'Fuhrpark', 'steer', 'fleet']]],
+    ['Kunden', [['kunden', 'Kunden', 'users', 'customers'], ['fahrzeuge', 'Fahrzeuge', 'car', 'vehicles'], ['modelle', 'Fahrzeug-Katalog', 'image', 'models']]],
     ['Preisliste & Lager', [['preisliste', 'Preisliste', 'tag', 'catalog'], ['lager', 'Lager', 'box', 'stock']]],
     ['Finanzen', [['finanzen', 'Übersicht', 'chart', 'accounts', 2], ['rechnungen', 'Rechnungen', 'file', 'invoices'], ['buchungen', 'Buchungen', 'list', 'accounts', 2], ['konten', 'Konten & Kassen', 'bank', 'accounts', 2], ['steuern', 'Steuern', 'percent', 'tax'], ['lohn', 'Lohn & Provision', 'wallet', 'payroll'], ['berichte', 'Berichte', 'chart', 'reports']]],
-    ['Personal', [['dienstplan', 'Dienstplan', 'clock', 'shifts'], ['schulungen', 'Schulungen', 'grad', 'trainings'], ['lizenzen', 'Lizenzen', 'id', 'licenses'], ['qualifikationen', 'Qualifikationen', 'grid', 'trainings', 2], ['personalakten', 'Personalakten', 'folder', 'stafffiles', 2], ['brett', 'Schwarzes Brett', 'megaphone', 'board']]],
+    ['Personal', [['regelwerk', 'Regelwerk', 'id', 'rules'], ['dienstplan', 'Dienstplan', 'clock', 'shifts'], ['schulungen', 'Schulungen', 'grad', 'trainings'], ['lizenzen', 'Lizenzen', 'id', 'licenses'], ['qualifikationen', 'Qualifikationen', 'grid', 'trainings', 2], ['personalakten', 'Personalakten', 'folder', 'stafffiles', 2], ['brett', 'Schwarzes Brett', 'megaphone', 'board']]],
     ['Firma', [['mitarbeiter', 'Mitarbeiter', 'users', 'staff'], ['raenge', 'Ränge & Gruppen', 'layers', 'ranks'], ['berechtigungen', 'Berechtigungen', 'shield', 'perms'], ['firma', 'Firmen-Einstellungen', 'building', 'settings']]],
     ['Administration', [['users', 'User-Management', 'userkey', null, 0, 'user:read'], ['server', 'Server-Management', 'server', null, 0, 'server:read'], ['tickets', 'Tickets', 'bug', null, 0, 'ticket:manage'], ['hilfe', 'Hilfe', 'help'], ['fehler', 'Fehler melden', 'alert'], ['changelog', 'Changelog', 'list']]],
   ];
-  const ROUTE_ALIAS = { auftrag: 'auftraege', kunde: 'kunden', fahrzeug: 'fahrzeuge', rechnung: 'rechnungen', einstellungen: null };
+  const ROUTE_ALIAS = { auftrag: 'auftraege', kunde: 'kunden', fahrzeug: 'fahrzeuge', rechnung: 'rechnungen', modell: 'modelle', einstellungen: null };
   const navEntry = (key) => { for (const [, items] of NAV) for (const it of items) if (it[0] === key) return it; return null; };
   const allowed = (entry) => {
     if (!entry) return true;
@@ -36,6 +36,7 @@
     rechnungen: (D.invoices || []).filter((i) => i.status === 'overdue').length,
     tickets: (D.tickets || []).filter((t) => t.status === 'open').length,
     users: (D.staff || []).filter((s) => s.status === 'pending').length,
+    regelwerk: BX.openRules ? BX.openRules().length : 0,
   });
 
   function sidebar(active) {
@@ -253,6 +254,14 @@
       L.set(k, v);
       render();
     },
+    'chart-toggle': (arg) => {
+      const i = arg.lastIndexOf(':'); const id = arg.slice(0, i), key = arg.slice(i + 1);
+      const h = (S.chartHidden[id] ||= []);
+      const at = h.indexOf(key);
+      if (at >= 0) h.splice(at, 1); else h.push(key);
+      S.keepScroll = true; render();
+    },
+    'chart-range': (arg) => { const i = arg.lastIndexOf(':'); S.chartRange[arg.slice(0, i)] = arg.slice(i + 1); S.keepScroll = true; render(); },
     'look-reset': () => { Object.assign(L.prefs, L.DEFAULTS); L.save(); L.apply(); toast('Darstellung auf Standard zurückgesetzt', 'ok'); render(); },
   });
 
@@ -268,6 +277,8 @@
         return;
       }
     }
+    const svgLink = e.target.closest('svg [data-href], .donut-legend [data-href]');
+    if (svgLink) { location.hash = svgLink.getAttribute('data-href'); return; }
     const row = e.target.closest('tr[data-href]');
     if (row && !e.target.closest('a, button, input, select, label')) { location.hash = row.dataset.href; return; }
     if (!e.target.closest('.rel')) ['bellMenu', 'userMenu'].forEach((id) => { const m = document.getElementById(id); if (m) m.innerHTML = ''; });
@@ -313,6 +324,35 @@
       });
     }
   });
+
+  // ---------- Diagramm-Tooltips und Hervorhebung ----------
+  const tipEl = () => { let t = document.getElementById('chartTip'); if (!t) { t = document.createElement('div'); t.id = 'chartTip'; t.className = 'chart-tip'; t.setAttribute('role', 'tooltip'); document.body.appendChild(t); } return t; };
+  function showTip(el, x, y) {
+    const t = tipEl();
+    const [head, ...rest] = el.getAttribute('data-tip').split('\n');
+    t.innerHTML = `<b>${esc(head)}</b>${rest.map((r) => `<div>${esc(r)}</div>`).join('')}`;
+    t.style.display = 'block';
+    const w = t.offsetWidth, h = t.offsetHeight;
+    t.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x + 14)) + 'px';
+    t.style.top = Math.max(8, y - h - 12) + 'px';
+  }
+  const hideTip = () => { const t = document.getElementById('chartTip'); if (t) t.style.display = 'none'; };
+  function donutFocus(wrap, seg) {
+    if (!wrap) return;
+    wrap.querySelectorAll('.seg').forEach((c) => c.classList.toggle('dim', seg !== null && c.dataset.seg !== seg));
+    wrap.querySelectorAll('.leg-row').forEach((r) => r.classList.toggle('hl', seg !== null && r.dataset.seg === seg));
+    const s = seg !== null ? wrap.querySelector(`.seg[data-seg="${seg}"]`) : null;
+    const l = wrap.querySelector('.dc-label'), v = wrap.querySelector('.dc-value');
+    if (l && v) { l.textContent = s ? s.dataset.dl : l.dataset.def; v.textContent = s ? s.dataset.dv : v.dataset.def; }
+  }
+  document.addEventListener('pointermove', (e) => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el && e.target.closest('svg')) showTip(el, e.clientX, e.clientY); else hideTip();
+    const wrap = e.target.closest && e.target.closest('.donut-wrap');
+    if (wrap) { const seg = e.target.closest('[data-seg]'); donutFocus(wrap, seg ? seg.dataset.seg : null); }
+  });
+  document.addEventListener('pointerleave', hideTip);
+  document.addEventListener('scroll', hideTip, { passive: true });
 
   // Drag & Drop im Auftragsboard
   document.addEventListener('dragstart', (e) => {

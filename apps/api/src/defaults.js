@@ -4,14 +4,14 @@ import { setSetting } from './lib.js';
 
 // Rechtevorlagen; Reihenfolge wie MODULES
 export const TEMPLATES = {
-  Leitung: '443444444443334444443',
-  Meister: '220334332332012332230',
-  Mechaniker: '200333332220010111020',
-  Azubi: '200221222200010111020',
-  Praktikant: '200221202000010110020',
-  Buchhaltung: '200220000244432220020',
-  'Nur lesen': '222222222222222222222',
-  'keine Rechte': '000000000000000000000',
+  Leitung: '4434444444433344444434444',
+  Meister: '2203343323320123322303332',
+  Mechaniker: '2003333322200101110202232',
+  Azubi: '2002212222000101110202222',
+  Praktikant: '2002212020000101100201222',
+  Buchhaltung: '2002200002444322200202202',
+  'Nur lesen': '2222222222222222222222222',
+  'keine Rechte': '0000000000000000000000002',
 };
 export const tplLevels = (name) => Object.fromEntries(MODULES.map((m, i) => [m, Number((TEMPLATES[name] || TEMPLATES['keine Rechte'])[i])]));
 

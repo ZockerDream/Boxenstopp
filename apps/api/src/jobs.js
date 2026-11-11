@@ -66,6 +66,13 @@ export const JOBS = {
       const im = await usersWith('invoices', 3);
       for (const i of inv) { await notify(im, 'invoice', `Rechnung ${i.no} ist überfällig`, '#/rechnung/' + i.id, 'bad', 'inv:' + i.id); n++; }
       if (inv.length) fireWebhooks('Rechnung überfällig', `${inv.length} überfällige Rechnung(en)`);
+      const fm = await usersWith('fleet', 3);
+      const fleet = await q(`SELECT id, name, service_due::text AS sd, insurance_until::text AS iu, km, service_km FROM fleet_vehicles WHERE status <> 'retired'`);
+      for (const f of fleet) {
+        if (f.sd && f.sd <= addDays(t, 7)) { await notify(fm, 'fleet', `${f.name}: Service ${f.sd < t ? 'überfällig' : 'fällig am ' + f.sd.split('-').reverse().join('.')}`, '#/fuhrpark/' + f.id, 'warn', `fleet-sd:${f.id}:${f.sd}`); n++; }
+        if (f.service_km && f.km >= f.service_km) { await notify(fm, 'fleet', `${f.name}: Service-Kilometerstand erreicht (${f.km} km)`, '#/fuhrpark/' + f.id, 'warn', `fleet-km:${f.id}:${f.service_km}`); n++; }
+        if (f.iu && f.iu <= addDays(t, 14)) { await notify(fm, 'fleet', `${f.name}: Versicherung ${f.iu < t ? 'abgelaufen' : 'läuft am ' + f.iu.split('-').reverse().join('.') + ' ab'}`, '#/fuhrpark/' + f.id, 'warn', `fleet-iu:${f.id}:${f.iu}`); n++; }
+      }
       return `${n} Hinweise`;
     },
   },

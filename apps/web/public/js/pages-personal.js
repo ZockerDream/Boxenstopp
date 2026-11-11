@@ -38,7 +38,7 @@
     }
     if (tab === 'aktivitaet') {
       const wk = D.activityWeeks;
-      const rows = Object.entries(D.activity).map(([uid, a]) => { const s = U.user(uid); const ab = D.absences.find((x) => x.user === uid); return { _dim: s.status === 'left', p: person(s, (U.rank(s.rank) || {}).name), w1: a[0] + ' h', w2: a[1] + ' h', w3: a[2] + ' h', w4: `<b>${a[3]} h</b>`, sp: U.spark(a), abs: (ab ? badge(ab.kind, 'warn') : '') + (s.status === 'left' ? badge('ausgeschieden', '') : s.status === 'leave' ? badge('beurlaubt', 'warn') : '') }; }).sort((x, y) => 0);
+      const rows = Object.entries(D.activity).map(([uid, a]) => { const s = U.user(uid); const ab = D.absences.find((x) => x.user === uid); return { _dim: s.status === 'left', p: person(s, (U.rank(s.rank) || {}).name), w1: a[0] + ' h', w2: a[1] + ' h', w3: a[2] + ' h', w4: `<b>${a[3]} h</b>`, sp: U.spark(a, D.activityWeeks), abs: (ab ? badge(ab.kind, 'warn') : '') + (s.status === 'left' ? badge('ausgeschieden', '') : s.status === 'leave' ? badge('beurlaubt', 'warn') : '') }; }).sort((x, y) => 0);
       return head + tabsHtml + note('Es gibt keine Mindeststundenzahl – die Übersicht zeigt nur die Stunden, daneben Abwesenheiten.', 'info') + `<div class="mt">${card('Dienststunden je Woche', table([{ key: 'p', label: 'Mitarbeiter' }, { key: 'w1', label: wk[0], num: true }, { key: 'w2', label: wk[1], num: true }, { key: 'w3', label: wk[2], num: true }, { key: 'w4', label: wk[3] + ' (laufend)', num: true }, { key: 'sp', label: 'Verlauf' }, { key: 'abs', label: '' }], rows), { flush: true })}</div>`;
     }
     if (tab === 'schichten') {

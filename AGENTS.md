@@ -10,8 +10,9 @@ Diese Datei gilt für jede KI, die an diesem Projekt arbeitet (`CLAUDE.md` verwe
 - **Wunsch des Auftraggebers vom 2026-11-11:** User-Management und Server-Management wie beim RP-Management-Board (CONCEPT.md, Abschnitt 12). Systemrollen (Administration) sind getrennt von Rängen/Gruppen (Werkstatt).
 - **2026-11-11:** Klickbares Mockup unter `mockup/` erstellt (`index.html` per Doppelklick, ohne Server). Alle 86 Ansichten in vier Rollen in Chromium ohne JS-Fehler geprüft, dazu Handy-Breite 390 px. Rückmeldung am selben Tag eingearbeitet: volle Breite, Handy- und Tablet-Tauglichkeit (390/768/1024 px geprüft), anpassbares Logo bei festem Namen „Boxenstopp“, Darstellung je Mitarbeiter (Modus System/Hell/Dunkel, 8 Farbthemes, Design V1 und V2 „Glass“ mit Hintergrund und Reglern; CONCEPT.md, Abschnitt 13). **Wartet auf Freigabe durch den Auftraggeber.** Danach Phase 1 (CONCEPT.md, Abschnitt 14).
 - **2026-11-11, Version 0.2.0:** Auf Anweisung des Auftraggebers („Bau dem schitt“) die erste lauffähige Version gebaut: Backend, Oberfläche (aus dem Mockup), Worker, Demo-Daten. **Test-Instanz läuft auf Port 9099** (Compose-Projekt `boxenstopp`, Demo-Daten, Passwort `Boxenstopp2026!`). Git-Repository neu angelegt (Branch `main`, noch ohne Remote). Umsetzungsstand, Abweichungen vom Plan und offene Punkte: TECHNICAL.md, Abschnitt 0.
+- **2026-11-11, Version 0.3.0** (Wünsche des Auftraggebers): anpassbares Dashboard, Fuhrpark der Werkstatt, Tuning-Bereich, Fahrzeug-Katalog mit Bildern, Regelwerk nur für Mitarbeiter (Dienstverordnung, Firmen-Kodex), interaktive Diagramme (CONCEPT.md, Abschnitt 15). Remote: `git@github.com:ZockerDream/Boxenstopp.git` (nur dieser Ordner ist das Repository). **Die Test-Instanz auf 9099 wird vom Auftraggeber benutzt** (eigene Daten, Inhaber umbenannt) – nie mehr `down -v` dort; Updates nur mit `up -d --build`, Demo-Ergänzungen mit `seed-demo-extras.js`.
 - **Nächster Schritt:** Rückmeldung des Auftraggebers zur Test-Instanz; danach die offenen Punkte aus TECHNICAL.md, Abschnitt 0.
-- Offene Fragen: CONCEPT.md, Abschnitt 15. Antworten dort und hier mit Datum eintragen.
+- Offene Fragen: CONCEPT.md, Abschnitt 16. Antworten dort und hier mit Datum eintragen.
 
 ## Fallstricke (alle schon einmal aufgetreten)
 
@@ -21,6 +22,12 @@ Diese Datei gilt für jede KI, die an diesem Projekt arbeitet (`CLAUDE.md` verwe
 - **Rate-Limit Login** (10/Minute je IP, `RATE_LIMIT_LOGIN`): Tests auf dem Wegwerf-Stack setzen es hoch, sonst antwortet der Login mit 429.
 - **Daten neu laden:** Die Oberfläche hält alles in `BX.data` und lädt nach jeder Änderung `/api/state` neu (`BX.call`, `BX.form`). Neue Daten für die Oberfläche gehören in `routes/state.js` – dort auch nach Rechten filtern, nie nur in der Oberfläche ausblenden.
 - **Aktionsnamen** liegen alle in `BX.actions`; gleiche Namen in zwei Seitendateien überschreiben sich (`register` war doppelt).
+- **jsonb sortiert Schlüssel um:** `users.ui` kommt mit anderer Reihenfolge zurück – in Tests Werte vergleichen, nie `JSON.stringify`.
+- **Bilder** liegen als `bytea` in `images` (im Backup enthalten). Uploads nur PNG/JPEG/WebP mit Magic-Byte-Prüfung; SVG nur aus dem Seed. `/api/images/:id` setzt eigene CSP (`sandbox`) und Cache-Header – der `onSend`-Hook in `main.js` überschreibt vorhandene Header nicht.
+- **Donut-Mitte:** Texte im SVG brauchen `pointer-events: none`, sonst verdecken sie die Segmente.
+- **Dashboard-Module:** Neues Modul in `DASH` und `DEFAULT_LAYOUT` (`pages-werkstatt.js`) eintragen; gespeicherte Layouts bekommen neue Module automatisch ans Ende.
+- **Regelwerk-Tabs** hängen am Parameter `doc`: `U.tabs` baut `?tab=` an, deshalb wird `&?tab=` zu `&tab=` ersetzt.
+- **Tests nicht doppelt auf demselben Stack:** `api.mjs` schaltet 2FA ein und sperrt Konten; vor jedem Lauf den Wegwerf-Stack mit `down -v` neu aufsetzen.
 - **Demo-Daten** nur auf leerer Datenbank (`seed-demo.js` bricht sonst ab). Neu aufsetzen: `docker compose down -v` löscht die Daten der Instanz.
 
 ## Einstieg in eine neue Sitzung

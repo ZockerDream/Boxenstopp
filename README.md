@@ -1,6 +1,6 @@
 # Boxenstopp
 
-Werkstatt-Management für Roleplay-Server: Aufträge, Kunden- und Fahrzeugakten, Preisliste und Lager, Finanzen mit Steuern, Lohn, Personal mit Schulungen und Lizenzen, Rechte nach Rängen und Gruppen sowie User- und Server-Management. Eine Instanz = eine Firma. Selbst gehostet mit Docker Compose.
+Werkstatt-Management für Roleplay-Server: Aufträge, Tuning-Konfigurator, Kunden- und Fahrzeugakten, Fahrzeug-Katalog mit Bildern, Fuhrpark, Preisliste und Lager, Finanzen mit Steuern, Lohn, Personal mit Schulungen, Lizenzen und Regelwerk, Rechte nach Rängen und Gruppen sowie User- und Server-Management. Eine Instanz = eine Firma. Selbst gehostet mit Docker Compose.
 
 - Fachliches Konzept: [CONCEPT.md](CONCEPT.md)
 - Technik und Umsetzungsstand: [TECHNICAL.md](TECHNICAL.md)
@@ -24,6 +24,8 @@ Statt der Ersteinrichtung lässt sich eine **leere** Instanz mit Beispieldaten f
 ```bash
 docker compose exec api node src/seed-demo.js
 ```
+
+Eine Demo-Instanz aus 0.2.0 bekommt die neuen Demo-Daten (Katalog, Fuhrpark, Tuning-Pakete, Regelwerk) ohne Zurücksetzen mit `docker compose exec api node src/seed-demo-extras.js`.
 
 Das legt die Firma „Rostfrei Garage“ mit elf Mitarbeitern, 20 Kunden, 30 Fahrzeugen, Preisliste, Lager, Aufträgen in jedem Status, Rechnungen, Buchungen, Steuerzeiträumen, Lohnläufen, Schulungen, Lizenzen und Schichten an. Alle Konten haben das Passwort `Boxenstopp2026!` (änderbar mit `DEMO_PASSWORD=…`):
 
@@ -80,5 +82,6 @@ docker compose -p boxenstopp-check --env-file /tmp/check.env down -v
 
 ## Versionen
 
+- **0.3.0** (2026-11-11): anpassbares Dashboard, Fuhrpark, Tuning, Fahrzeug-Katalog mit Bildern, Regelwerk, interaktive Diagramme
 - **0.2.0** (2026-11-11): erste lauffähige Version
 - **0.1.0** (2026-11-11): klickbares Mockup

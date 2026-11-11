@@ -5,6 +5,7 @@ import { fail } from './lib.js';
 export const MODULES = [
   'staff', 'ranks', 'perms', 'customers', 'vehicles', 'orders', 'appointments', 'callouts', 'catalog', 'stock',
   'invoices', 'accounts', 'tax', 'payroll', 'reports', 'shifts', 'trainings', 'licenses', 'stafffiles', 'board', 'settings',
+  'fleet', 'models', 'tuning', 'rules',
 ];
 export const FLAGS = {
   'rabatt.max_prozent': { label: 'Max. Rabatt ohne Freigabe', type: 'percent' },

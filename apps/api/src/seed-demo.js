@@ -6,6 +6,7 @@ import { installDefaults } from './defaults.js';
 import { unitPrice, groupDiscount, lineCents } from './pricing.js';
 import { computeTaxPeriod, computePayroll, periodBounds } from './calc.js';
 import { MODULES } from './authz.js';
+import { seedExtras } from './seed-extras.js';
 
 const PW = process.env.DEMO_PASSWORD || 'Boxenstopp2026!';
 let seed = 20261111;
@@ -18,7 +19,7 @@ await migrate();
 const T = today();
 const ts = (d, hm = '18:00') => `${d} ${hm}`;
 
-await tx(async (c) => {
+const ctx = await tx(async (c) => {
   const n = await c.one('SELECT count(*)::int AS n FROM users');
   if (n.n > 0) throw new Error('Die Datenbank hat schon Benutzer – Demo-Daten nur auf einer leeren Instanz.');
   const D = await installDefaults(c, { firmName: 'Rostfrei Garage', short: 'RFG', address: 'Hafenstraße 12, Industriegebiet Süd', phone: '555-0142', hours: 'Mo–So 16:00–02:00', taxRate: 8 });
@@ -364,6 +365,7 @@ await tx(async (c) => {
   for (const [k, qty, kind, reason, d] of [['turbo', 2, 'in', 'Lieferung Teilehandel', -20], ['brems', 2, 'in', 'Lieferung Teilehandel', -6], ['kit', -1, 'adjust', 'Beschädigt beim Einbau', -2]]) {
     await c.query(`INSERT INTO stock_movements (part_id, qty, kind, reason, by_user, at) VALUES ($1,$2,$3,$4,$5, now() + ($6 || ' days')::interval)`, [P[k], qty, kind, reason, U.Deniz, String(d)]);
   }
+  return { U, CU, D };
 });
 
 // Steuern abführen und Lohnläufe für ältere Wochen (nach dem Commit, damit die Berechnung die Daten sieht)
@@ -390,6 +392,7 @@ for (const back of [3, 2]) {
     await q('INSERT INTO payroll_lines (run_id, user_id, hours, hourly, commission_base, commission, fixed, total, transaction_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [run.id, l.user, l.hours, l.hourly, l.base, l.commission, l.fixed, l.total, t.id]);
   }
 }
+await seedExtras({ T, ...ctx });
 console.log(`Demo-Daten angelegt. Anmeldung z. B. mit lena.brandt@rostfrei.rp (Inhaberin + Admin) – Passwort: ${PW}`);
 console.log('Weitere Konten: marco.vogt@, deniz.aydin@, tim.becker@, mia.schulz@, nora.weiss@, kai.neumann@rostfrei.rp (gleiches Passwort)');
 await pool.end();

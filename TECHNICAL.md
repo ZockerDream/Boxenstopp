@@ -1,10 +1,10 @@
 # Boxenstopp – Technische Sicht
 
-Ergänzt [CONCEPT.md](CONCEPT.md). Stand: **Version 0.2.0** (2026-11-11), erste lauffähige Version. Abschnitt 0 beschreibt, was umgesetzt ist und wo die Umsetzung vom ursprünglichen Plan abweicht; die Abschnitte danach sind der Plan und gelten weiter als Ziel. Maßgeblich für das Schema ist [`apps/api/migrations/`](apps/api/migrations/).
+Ergänzt [CONCEPT.md](CONCEPT.md). Stand: **Version 0.3.0** (2026-11-11). Abschnitt 0 beschreibt, was umgesetzt ist und wo die Umsetzung vom ursprünglichen Plan abweicht; die Abschnitte danach sind der Plan und gelten weiter als Ziel. Maßgeblich für das Schema ist [`apps/api/migrations/`](apps/api/migrations/).
 
 Boxenstopp ist **eigenständig**: eigenes Repository, eigene Datenbank, eigene Benutzer, keine Abhängigkeit zu anderen Anwendungen. **Eine Instanz = eine Firma**; es gibt keine Mandanten-Spalte.
 
-## 0. Umsetzungsstand 0.2.0
+## 0. Umsetzungsstand 0.3.0
 
 ### Aufbau
 | Teil | Datei | Inhalt |
@@ -19,6 +19,19 @@ Boxenstopp ist **eigenständig**: eigenes Repository, eigene Datenbank, eigene B
 | Jobs | `jobs.js`, `worker.js` | Eigener Zeitplan im Worker (Prüfung jede Minute, Läufe in `job_runs`): Daueraufträge, Erinnerungen, Mindestbestand, offene Schichten, Steuer fällig, Backup, Aufräumen |
 | Demo-Daten | `seed-demo.js` | Nur auf leerer Datenbank; Daten relativ zum heutigen Datum |
 | Oberfläche | `apps/web/public/js/` | `store.js` (API-Client, Daten), `app.js` (Router, Formulare, Ereignisse), `pages-*.js` (Seiten und Aktionen), `look.js` (Darstellung, Logo), `ui.js` (Bausteine, SVG-Diagramme) |
+
+### Neu in 0.3.0 (Migration 002)
+| Teil | Umsetzung |
+|---|---|
+| Tabellen | `vehicle_models`, `images` (bytea, damit Bilder im Backup sind), `fleet_vehicles`, `fleet_log`, `tuning_packages`, `rule_docs`, `rule_doc_versions`, `rule_acks`; `vehicles.model_id`, `callouts.fleet_id`, Buchungsquelle `fleet` |
+| Rechte | neue Funktionen `fleet`, `models`, `tuning`, `rules`; bestehende Ränge/Gruppen übernehmen die Stufe von `vehicles` bzw. `catalog`, `rules` = Lesen (Leitung: Verwalten) |
+| Routen | `routes/extras.js`: `/api/images` (Upload als data-URL, Magic-Byte-Prüfung, ≤ 3 MB, kein SVG; Auslieferung nur angemeldet mit `CSP: sandbox`), `/api/fleet/:id/checkout|checkin|entry`, `/api/tuning/order`, `/api/rules` (Fassungen, `/ack`, `/versions`, `/move`); Stammdaten über `/api/r/fleet`, `/api/r/models`, `/api/r/tuningPackages` |
+| Status | `routes/state.js` liefert zusätzlich `models`, `images` (ohne Daten), `fleet`, `fleetLog`, `tuningPackages`, `ruleDocs`, `myAcks`, `ruleAcks`, `revenue90`, `weekly26` |
+| Dashboard | Layout in `users.ui.dashboard` (`order`, `hidden`, `spans`); Module in `DASH` (`pages-werkstatt.js`) |
+| Diagramme | `ui.js`: `data-tip` (Tooltip in `app.js`), `data-href` (Klick), Legende `chart-toggle`, Zeitraum `chart-range`; Zustand in `BX.state.chartHidden/chartRange` |
+| Markdown | `U.mdBlock()` – erst escapen, dann Überschriften, Listen, Zitat, Tabelle, fett/kursiv, http(s)-Links |
+| Demo | `seed-extras.js` (gezeichnete SVG-Fahrzeuge – nur der Seed darf SVG speichern), `seed-demo-extras.js` ergänzt bestehende 0.2.0-Demo-Instanzen |
+| Jobs | `reminders.daily` meldet fälligen Fuhrpark-Service und ablaufende Versicherungen |
 
 ### Bewusste Abweichungen vom Plan
 | Plan | Umsetzung | Grund |
@@ -40,7 +53,7 @@ Boxenstopp ist **eigenständig**: eigenes Repository, eigene Datenbank, eigene B
 Test im Tool für Schulungen, E-Mail-Versand (SMTP), Dokumente/Bilder an Kunden, Fahrzeugen und Aufträgen, Kunden zusammenführen, CSV-Import der Preisliste, Rechnung als Bild, eigene Inventur-Protokolle (Inventur ist derzeit eine Korrekturbuchung je Teil), Preisstände mit Gültig-ab-Datum für einzelne Leistungen, Benachrichtigungs-Einstellungen je Ereignis, Unit-Tests (`node --test`).
 
 ### Tests
-`tests/e2e/api.mjs` (79 Prüfungen: Abläufe, Rechte, Unveränderlichkeit, 2FA, Sperre, Einladung, Backups, CSV, API-Schlüssel), `tests/e2e/browser.mjs` (45 Prüfungen: geführte Abläufe in der Oberfläche, Rechte in der Navigation, 390/768/1024 px ohne Überlauf), `tests/e2e/crawl.mjs` (jede Seite und jeder Tab in vier Rollen, nur lesend). Ablauf: README.
+`tests/e2e/api.mjs` (110 Prüfungen: Abläufe, Rechte, Unveränderlichkeit, 2FA, Sperre, Einladung, Backups, CSV, API-Schlüssel, Fuhrpark, Bilder, Tuning, Regelwerk, Dashboard-Layout), `tests/e2e/browser.mjs` (75 Prüfungen: geführte Abläufe, Dashboard anpassen, Diagramm-Interaktion, Fuhrpark, Galerie, Tuning, Regelwerk-Bestätigung, Rechte in der Navigation, 390/768/1024 px ohne Überlauf), `tests/e2e/crawl.mjs` (jede Seite und jeder Tab in vier Rollen, nur lesend, 447 Aufrufe). Ablauf: README.
 
 ## 1. Stack
 

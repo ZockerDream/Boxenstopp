@@ -82,7 +82,7 @@ export async function buildState(req) {
   const needCust = ['customers', 'orders', 'invoices', 'appointments', 'callouts', 'vehicles'].some((m) => L(m) >= 1);
   S.customers = needCust ? (await q('SELECT * FROM customers ORDER BY name')).map((c) => ({ id: c.id, name: c.name, kind: c.kind, phone: c.phone, pg: c.price_group_id, terms: c.terms_days, tags: c.tags, warning: c.warning, blocked: c.blocked, since: c.since, archived: c.archived })) : [];
   S.customerEntries = L('customers') >= 1 ? await q('SELECT id, customer_id AS customer, author_id AS author, at, body FROM customer_entries ORDER BY at DESC') : [];
-  S.vehicles = needCust ? (await q('SELECT * FROM vehicles ORDER BY plate')).map((v) => ({ id: v.id, plate: v.plate, make: v.make, model: v.model, cls: v.class_id, color: v.color, vin: v.vin, km: v.km, owner: v.owner_id, status: v.status, created: v.created_at })) : [];
+  S.vehicles = needCust ? (await q('SELECT * FROM vehicles ORDER BY plate')).map((v) => ({ id: v.id, plate: v.plate, make: v.make, model: v.model, cls: v.class_id, color: v.color, vin: v.vin, km: v.km, owner: v.owner_id, status: v.status, created: v.created_at, modelId: v.model_id })) : [];
   S.ownerHistory = L('vehicles') >= 1 ? await q('SELECT vehicle_id AS vehicle, customer_id AS customer, from_at::text AS "from", to_at::text AS "to" FROM vehicle_owner_history ORDER BY from_at DESC') : [];
   S.tuning = L('vehicles') >= 1 ? await q('SELECT vehicle_id AS vehicle, category, level, source, updated_at::date::text AS date FROM vehicle_tuning') : [];
 
@@ -133,15 +133,18 @@ export async function buildState(req) {
 
   // Umsatz der letzten 14 Tage und 8 Wochen (Zahlungseingänge bzw. Ausgaben)
   if (il >= 2 || al >= 2 || L('reports') >= 1) {
-    const from14 = addDays(TODAY, -13);
-    const daily = Object.fromEntries((await q('SELECT at::text AS d, sum(amount)::float AS v FROM invoice_payments WHERE at >= $1 GROUP BY at', [from14])).map((r) => [r.d, r.v]));
-    S.revenue14 = Array.from({ length: 14 }, (_, i) => { const d = addDays(from14, i); return { date: d, rev: daily[d] || 0 }; });
+    const from90 = addDays(TODAY, -89);
+    const daily = Object.fromEntries((await q('SELECT at::text AS d, sum(amount)::float AS v FROM invoice_payments WHERE at >= $1 GROUP BY at', [from90])).map((r) => [r.d, r.v]));
+    const dexp = Object.fromEntries((await q(`SELECT booked_at::text AS d, sum(amount)::float AS v FROM transactions WHERE type = 'expense' AND booked_at >= $1 GROUP BY 1`, [from90])).map((r) => [r.d, r.v]));
+    S.revenue90 = Array.from({ length: 90 }, (_, i) => { const d = addDays(from90, i); return { date: d, rev: daily[d] || 0, exp: dexp[d] || 0 }; });
+    S.revenue14 = S.revenue90.slice(-14);
     const ws = weekStart(TODAY);
-    const from8 = addDays(ws, -49);
+    const from8 = addDays(ws, -7 * 25);
     const rev = Object.fromEntries((await q(`SELECT date_trunc('week', at)::date::text AS w, sum(amount)::float AS v FROM invoice_payments WHERE at >= $1 GROUP BY 1`, [from8])).map((r) => [r.w, r.v]));
     const exp = Object.fromEntries((await q(`SELECT date_trunc('week', booked_at)::date::text AS w, sum(amount)::float AS v FROM transactions WHERE type = 'expense' AND booked_at >= $1 GROUP BY 1`, [from8])).map((r) => [r.w, r.v]));
-    S.weekly8 = Array.from({ length: 8 }, (_, i) => { const w = addDays(from8, i * 7); return { label: 'KW ' + isoWeek(w), from: w, rev: rev[w] || 0, exp: exp[w] || 0 }; });
-  } else { S.revenue14 = []; S.weekly8 = []; }
+    S.weekly26 = Array.from({ length: 26 }, (_, i) => { const w = addDays(from8, i * 7); return { label: 'KW ' + isoWeek(w), from: w, to: addDays(w, 6), rev: rev[w] || 0, exp: exp[w] || 0 }; });
+    S.weekly8 = S.weekly26.slice(-8);
+  } else { S.revenue14 = []; S.revenue90 = []; S.weekly8 = []; S.weekly26 = []; }
 
   // ---------- Lohn ----------
   if (L('payroll') >= 1) {
@@ -196,7 +199,21 @@ export async function buildState(req) {
 
   // ---------- Termine, Einsätze ----------
   S.appointments = L('appointments') >= 1 ? await q(`SELECT id, day::text AS date, time, bay_id AS bay, title, customer_id AS customer, order_id AS "order", note FROM appointments WHERE day >= current_date - 60 ORDER BY day, time`) : [];
-  S.callouts = L('callouts') >= 1 ? (await q(`SELECT id, no, local_ts(at) AS at, location AS loc, requested_by AS by, customer_id AS customer, vehicle_id AS vehicle, driver_id AS driver, status, fee::float, order_id AS "order", invoice_id AS invoice FROM callouts ORDER BY at DESC LIMIT 200`)) : [];
+  S.callouts = L('callouts') >= 1 ? (await q(`SELECT id, no, local_ts(at) AS at, location AS loc, requested_by AS by, customer_id AS customer, vehicle_id AS vehicle, driver_id AS driver, status, fee::float, order_id AS "order", invoice_id AS invoice, fleet_id AS fleet FROM callouts ORDER BY at DESC LIMIT 200`)) : [];
+
+  // ---------- Fahrzeug-Katalog, Bilder, Fuhrpark, Tuning, Regelwerk ----------
+  const seeModels = ['models', 'vehicles', 'fleet', 'orders', 'tuning'].some((m) => L(m) >= 1);
+  S.models = seeModels ? await q(`SELECT id, make, model, class_id AS cls, body, price::float, seats, top_speed AS "topSpeed", drive, fuel, description, tuning_note AS "tuningNote", active FROM vehicle_models ORDER BY make, model`) : [];
+  const fl = L('fleet');
+  S.fleet = fl >= 1 || L('callouts') >= 1 ? (await q(`SELECT id, name, plate, kind, model_id AS "modelId", make, model, status, driver_id AS driver, km, service_due::text AS "serviceDue", service_km AS "serviceKm", insurance_until::text AS "insuranceUntil", purchase_price::float AS "purchasePrice", purchased_on::text AS "purchasedOn", note FROM fleet_vehicles ORDER BY status = 'retired', name`)) : [];
+  S.fleetLog = fl >= 1 ? (await q(`SELECT id, fleet_id AS fleet, user_id AS "user", kind, local_ts(started_at) AS started, local_ts(ended_at) AS ended, km_start AS "kmStart", km_end AS "kmEnd", amount::float, text, local_ts(at) AS at FROM fleet_log ORDER BY at DESC LIMIT 500`)).filter((x) => fl >= 2 || x.user === me.id) : [];
+  S.images = (seeModels || fl >= 1) ? await q(`SELECT id, owner_type AS "ownerType", owner_id AS "ownerId", caption, position, is_cover AS cover, size FROM images ORDER BY owner_id, position`) : [];
+  S.tuningPackages = (L('tuning') >= 1 || L('orders') >= 1) ? await q(`SELECT id, name, description, items, discount::float, active, position AS pos FROM tuning_packages ORDER BY position, name`) : [];
+  if (L('rules') >= 1 && (me.rank_id || L('rules') >= 3)) {
+    S.ruleDocs = await q(`SELECT id, title, body, version, require_ack AS "requireAck", position AS pos, updated_by AS "updatedBy", local_ts(updated_at) AS "updatedAt" FROM rule_docs ORDER BY position, title`);
+    S.myAcks = Object.fromEntries((await q('SELECT doc_id, max(version) AS v FROM rule_acks WHERE user_id = $1 GROUP BY doc_id', [me.id])).map((r) => [r.doc_id, r.v]));
+    S.ruleAcks = L('rules') >= 3 ? await q(`SELECT a.doc_id AS doc, a.user_id AS "user", max(a.version) AS version, local_ts(max(a.at)) AS at FROM rule_acks a GROUP BY a.doc_id, a.user_id`) : [];
+  } else { S.ruleDocs = []; S.myAcks = {}; S.ruleAcks = []; }
 
   // ---------- Benachrichtigungen, eigenes Konto ----------
   S.notifications = await q(`SELECT id, text, link, tone, local_ts(created_at) AS at, read_at IS NOT NULL AS read FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30`, [me.id]);

@@ -17,7 +17,7 @@ export const config = {
   backupRetentionDays: Number(env.BACKUP_RETENTION_DAYS || 14),
   publicDir: env.PUBLIC_DIR || new URL('../public', import.meta.url).pathname,
   tz: env.TZ || 'Europe/Berlin',
-  version: '0.2.0',
+  version: '0.3.0',
 };
 
 export const ENV_PUBLIC = () => ({

@@ -12,7 +12,7 @@ const routes = ['dashboard', 'auftraege', 'auftraege?view=liste', 'termine', 'ei
   'dienstplan', 'dienstplan?tab=aktivitaet', 'dienstplan?tab=schichten', 'dienstplan?tab=abwesend', 'schulungen', 'schulungen?tab=termine', 'schulungen?tab=nachweise', 'lizenzen', 'lizenzen?tab=firma', 'lizenzen?tab=arten',
   'qualifikationen', 'personalakten', 'brett', 'mitarbeiter', 'raenge', 'berechtigungen', 'berechtigungen?tab=gruppen', 'berechtigungen?tab=personen', 'berechtigungen?tab=einzel', 'berechtigungen?tab=wer',
   'firma', 'firma?tab=steuer', 'firma?tab=klassen', 'firma?tab=funktionen', 'users', 'users?tab=rollen', 'users?tab=einladungen', 'server', 'server?tab=sicherheit', 'server?tab=system', 'server?tab=integrationen', 'server?tab=audit',
-  'tickets', 'fehler', 'hilfe', 'changelog', 'einstellungen', 'einstellungen?tab=sicherheit', 'einstellungen?tab=darstellung', 'einstellungen?tab=sitzungen', 'einstellungen?tab=api', 'einstellungen?tab=rechte'];
+  'tickets', 'fehler', 'hilfe', 'changelog', 'fuhrpark', 'fuhrpark?alle=1', 'modelle', 'tuning', 'tuning?tab=pakete', 'tuning?tab=uebersicht', 'regelwerk', 'regelwerk?tab=bestaetigungen', 'buchungen?von=2026-01-01&bis=2030-01-01', 'auftraege?view=liste&status=in_progress', 'einstellungen', 'einstellungen?tab=sicherheit', 'einstellungen?tab=darstellung', 'einstellungen?tab=sitzungen', 'einstellungen?tab=api', 'einstellungen?tab=rechte'];
 
 const browser = await chromium.launch();
 const problems = [];
@@ -29,8 +29,8 @@ for (const who of USERS) {
   await page.click('button[type=submit]');
   await page.waitForSelector('.sidebar', { timeout: 10000 });
   // Detailseiten aus den Daten
-  const ids = await page.evaluate(() => ({ o: (BX.data.orders || []).slice(-3).map((x) => x.id), k: (BX.data.customers || []).slice(0, 2).map((x) => x.id), v: (BX.data.vehicles || []).slice(0, 2).map((x) => x.id), i: (BX.data.invoices || []).slice(0, 3).map((x) => x.id), s: (BX.data.staff || []).filter((x) => x.rank).slice(0, 3).map((x) => x.id) }));
-  const all = routes.concat(ids.o.map((x) => 'auftrag/' + x), ids.k.flatMap((x) => ['kunde/' + x, 'kunde/' + x + '?tab=rechnungen', 'kunde/' + x + '?tab=eintraege']), ids.v.flatMap((x) => ['fahrzeug/' + x, 'fahrzeug/' + x + '?tab=tuning', 'fahrzeug/' + x + '?tab=garantie']), ids.i.map((x) => 'rechnung/' + x), ids.s.map((x) => 'personalakten?u=' + x), ids.s.map((x) => 'berechtigungen?tab=wer&u=' + x));
+  const ids = await page.evaluate(() => ({ o: (BX.data.orders || []).slice(-3).map((x) => x.id), k: (BX.data.customers || []).slice(0, 2).map((x) => x.id), v: (BX.data.vehicles || []).slice(0, 2).map((x) => x.id), i: (BX.data.invoices || []).slice(0, 3).map((x) => x.id), s: (BX.data.staff || []).filter((x) => x.rank).slice(0, 3).map((x) => x.id), f: (BX.data.fleet || []).map((x) => x.id), m: (BX.data.models || []).slice(0, 3).map((x) => x.id), r: (BX.data.ruleDocs || []).map((x) => x.id) }));
+  const all = routes.concat(ids.o.map((x) => 'auftrag/' + x), ids.k.flatMap((x) => ['kunde/' + x, 'kunde/' + x + '?tab=rechnungen', 'kunde/' + x + '?tab=eintraege']), ids.v.flatMap((x) => ['fahrzeug/' + x, 'fahrzeug/' + x + '?tab=tuning', 'fahrzeug/' + x + '?tab=garantie']), ids.i.map((x) => 'rechnung/' + x), ids.s.map((x) => 'personalakten?u=' + x), ids.s.map((x) => 'berechtigungen?tab=wer&u=' + x), ids.f.flatMap((x) => ['fuhrpark/' + x, 'fuhrpark/' + x + '?tab=kosten', 'fuhrpark/' + x + '?tab=verlauf', 'fuhrpark/' + x + '?tab=einsaetze']), ids.m.map((x) => 'modell/' + x), ids.r.map((x) => 'regelwerk?doc=' + x), ids.v.map((x) => 'tuning?v=' + x));
   for (const r of all) {
     await page.evaluate((h) => { location.hash = h; }, '#/' + r);
     await page.waitForTimeout(40);
@@ -38,7 +38,7 @@ for (const who of USERS) {
     const txt = await page.textContent('main').catch(() => '');
     const m = (txt || '').match(/.{0,50}(undefined|NaN|\[object Object\]|Fehler beim Anzeigen).{0,50}/);
     if (m) problems.push(`${who} #/${r}: „${m[0]}“`);
-    if (SHOTS && who === USERS[0] && /^(dashboard|auftraege|auftrag\/|preisliste$|rechnung\/|steuern|lohn|qualifikationen|berechtigungen$|users$|server$|einstellungen\?tab=darstellung)/.test(r)) await page.screenshot({ path: `${SHOTS}/${who}_${r.replace(/[\/?=&]/g, '_').slice(0, 60)}.png` });
+    if (SHOTS && who === USERS[0] && /^(dashboard|auftraege$|fuhrpark|modelle|modell\/|tuning|regelwerk$|finanzen)/.test(r)) await page.screenshot({ path: `${SHOTS}/${who}_${r.replace(/[\/?=&]/g, '_').slice(0, 60)}.png` });
   }
   await ctx.close();
 }

@@ -28,7 +28,7 @@ export const RESOURCES = {
   },
   vehicles: {
     table: 'vehicles', module: 'vehicles', area: 'Fahrzeuge', label: (r) => r.plate,
-    fields: { plate: ['plate', req(16).transform((v) => v.toUpperCase())], make: ['make', str(60)], model: ['model', str(60)], cls: ['class_id', idN], color: ['color', str(40)], vin: ['vin', str(40)], km: ['km', int], owner: ['owner_id', idN], status: ['status', z.enum(['active', 'scrapped', 'stolen'])] },
+    fields: { plate: ['plate', req(16).transform((v) => v.toUpperCase())], make: ['make', str(60)], model: ['model', str(60)], cls: ['class_id', idN], color: ['color', str(40)], vin: ['vin', str(40)], km: ['km', int], owner: ['owner_id', idN], status: ['status', z.enum(['active', 'scrapped', 'stolen'])], modelId: ['model_id', idN] },
     after: async (c, row, before) => {
       if (!before || before.owner_id !== row.owner_id) {
         await c.query('UPDATE vehicle_owner_history SET to_at = current_date WHERE vehicle_id = $1 AND to_at IS NULL', [row.id]);
@@ -88,6 +88,25 @@ export const RESOURCES = {
     fields: { type: ['type_id', id], user: ['user_id', idN], no: ['no', str(40)], issuer: ['issuer', str(80)], issued: ['issued', date], expires: ['expires', dateN], status: ['status', z.enum(['valid', 'suspended', 'revoked'])], reason: ['reason', strN()] },
   },
   boardPosts: { table: 'board_posts', module: 'board', area: 'Schwarzes Brett', label: (r) => r.title, fields: { title: ['title', req(120)], body: ['body', str(8000)], pinned: ['pinned', bool] }, defaults: (r) => ({ author_id: r.user.id }) },
+  fleet: {
+    table: 'fleet_vehicles', module: 'fleet', area: 'Fuhrpark', label: (r) => `${r.name} (${r.plate})`,
+    fields: {
+      name: ['name', req(60)], plate: ['plate', req(16).transform((v) => v.toUpperCase())], kind: ['kind', str(40)], modelId: ['model_id', idN], make: ['make', str(60)], model: ['model', str(60)],
+      status: ['status', z.enum(['available', 'in_use', 'workshop', 'retired'])], km: ['km', int], serviceDue: ['service_due', dateN], serviceKm: ['service_km', intN], insuranceUntil: ['insurance_until', dateN],
+      purchasePrice: ['purchase_price', money.nullable().or(z.literal('').transform(() => null))], purchasedOn: ['purchased_on', dateN], note: ['note', str(500)],
+    },
+  },
+  models: {
+    table: 'vehicle_models', module: 'models', area: 'Fahrzeug-Katalog', label: (r) => `${r.make} ${r.model}`,
+    fields: {
+      make: ['make', req(60)], model: ['model', req(60)], cls: ['class_id', idN], body: ['body', str(40)], price: ['price', money.nullable().or(z.literal('').transform(() => null))],
+      seats: ['seats', intN], topSpeed: ['top_speed', intN], drive: ['drive', str(30)], fuel: ['fuel', str(30)], description: ['description', str(4000)], tuningNote: ['tuning_note', str(1000)], active: ['active', bool],
+    },
+  },
+  tuningPackages: {
+    table: 'tuning_packages', module: 'tuning', area: 'Tuning', label: (r) => 'Paket ' + r.name,
+    fields: { name: ['name', req(80)], description: ['description', str(1000)], items: ['items', z.array(id).min(1, 'mindestens eine Leistung').max(20)], discount: ['discount', z.coerce.number().min(0).max(50)], active: ['active', bool], pos: ['position', int] },
+  },
   groups: { table: 'groups', module: 'ranks', write: 4, area: 'Gruppen', label: (r) => r.name, fields: { name: ['name', req(40)], desc: ['description', str(200)] } },
 };
 

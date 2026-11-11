@@ -1,6 +1,6 @@
 # Boxenstopp – Konzept
 
-Stand: **Version 0.2.0** (2026-11-11), erste lauffähige Version; was davon umgesetzt ist, steht in [TECHNICAL.md](TECHNICAL.md), Abschnitt 0. Technische Umsetzung: [TECHNICAL.md](TECHNICAL.md), Regeln für KI-Assistenten: [AGENTS.md](AGENTS.md).
+Stand: **Version 0.3.0** (2026-11-11); was davon umgesetzt ist, steht in [TECHNICAL.md](TECHNICAL.md), Abschnitt 0. Technische Umsetzung: [TECHNICAL.md](TECHNICAL.md), Regeln für KI-Assistenten: [AGENTS.md](AGENTS.md).
 
 ## 1. Ziel
 
@@ -325,7 +325,50 @@ Wünsche des Auftraggebers vom 2026-11-11 (nach dem ersten Mockup):
 | **3** | Schulungen, Lizenzen, Qualifikationsmatrix und -prüfung; Personalakten; Schwarzes Brett; Einsätze; Termine & Stellplätze |
 | **4** | Test im Tool, Tuning-Stand, Rechnung/Preisliste als Bild, öffentliche Preisliste, Kunden zusammenführen, CSV-Importe, Integrationen (Webhooks, API-Schlüssel), Tickets, Berichte |
 
-## 15. Offene Fragen
+## 15. Erweiterungen 0.3.0
+
+Wünsche des Auftraggebers vom 2026-11-11 (nach der ersten lauffähigen Version):
+
+### 15.1 Anpassbares Dashboard („wie im RP-Management-Board“)
+- 14 Module: Kennzahlen, Umsatz, Im Dienst, Handlungsbedarf, Heute auf den Bühnen, Offene Einsätze, Umsatz & Ausgaben je Woche, Aufträge nach Status, Meine Aufträge, Fuhrpark, Regelwerk, Umsatz nach Kategorie, Lager knapp, Schwarzes Brett. Jeder sieht nur Module, für die er die Rechte hat.
+- „Anpassen“: Module ziehen oder mit ‹ › verschieben, Breite 4/6/8/12 von 12 Spalten, mit ✕ ausblenden, über die Leiste wieder hinzufügen, „Standard“ setzt zurück. Gespeichert je Benutzer, sofort.
+- Anders als im Board in **V1 und V2** (im Board nur V2).
+
+### 15.2 Fuhrpark der Werkstatt
+- Firmenfahrzeuge (Abschleppwagen, Servicewagen, Transporter, Dienstwagen …) mit Rufname, Kennzeichen, Modell aus dem Katalog, Kilometerstand, nächstem Service (Datum und/oder km), Versicherung, Kaufpreis, Bildern.
+- Status: verfügbar, im Einsatz, Werkstatt, ausgemustert.
+- **Ausgabe und Rückgabe** mit Kilometerstand (Fahrtenbuch). Selbst ausgeben ab „Lesen“, für andere ab „Lesen & Schreiben“. Bei der Rückgabe kann ein Schaden gemeldet werden: Das Fahrzeug geht in die Werkstatt, die Verwalter werden benachrichtigt.
+- Service, Tanken, Schäden, Kosten und Vermerke. Kosten optional als Ausgabe gebucht (Kategorie „Fuhrpark“).
+- Täglicher Hinweis bei fälligem Service (7 Tage vorher, bzw. Kilometerstand erreicht) und ablaufender Versicherung (14 Tage).
+- Einsätze tragen das eingesetzte Firmenfahrzeug.
+- Recht „Fuhrpark“ (bei der Einführung von „Fahrzeuge“ übernommen).
+
+### 15.3 Tuning
+- **Konfigurator:** Kundenfahrzeug wählen, aktuellen Tuning-Stand je Kategorie sehen, Upgrades je Kategorie mit dem Preis der Fahrzeugklasse wählen (bereits Verbautes ist gesperrt). Extras (Optik, Lack) und Pakete dazu. Die Zusammenstellung zeigt Rabatt aus Preisgruppe bzw. Paket. Daraus entsteht mit einem Klick ein **Angebot** oder ein **Auftrag** (inklusive Teile-Reservierung und Qualifikationsprüfung).
+- **Pakete:** mehrere Leistungen mit Paketrabatt; der Paketrabatt gilt ohne Freigabe, ein höherer Gruppenrabatt geht vor.
+- **Übersicht:** getunte Fahrzeuge, Stufen je Kategorie, Tuning-Umsatz, am stärksten getunte Fahrzeuge.
+- Recht „Tuning“ (Pakete pflegen ab „Lesen & Schreiben“); Angebote/Aufträge anlegen braucht „Aufträge: Lesen & Schreiben“.
+
+### 15.4 Fahrzeug-Katalog mit Bildern
+- Modelle mit Hersteller, Modell, Fahrzeugklasse (bestimmt die Preise), Bauform, Neupreis, Sitzen, Höchstgeschwindigkeit, Antrieb, Kraftstoff, Beschreibung, Hinweisen für die Werkstatt.
+- **Bildergalerie** je Modell (und je Firmenfahrzeug): bis 30 Bilder, Titelbild, Reihenfolge, Bildunterschrift, Leuchtkasten. Upload PNG/JPEG/WebP; im Browser auf höchstens 1600 px verkleinert; höchstens 3 MB.
+- Kunden- und Firmenfahrzeuge verknüpfen ein Modell (füllt Hersteller, Modell, Klasse); die Fahrzeugakte zeigt das Bild.
+- Recht „Fahrzeug-Katalog“ (bei der Einführung von „Preisliste“ übernommen).
+
+### 15.5 Regelwerk – nur für Mitarbeiter
+- Eigener Bereich „Regelwerk“ mit Dokumenten wie **Dienstverordnung** und **Firmen-Kodex** (beliebig viele, sortierbar). Nur für Benutzer mit Rang; Support-Konten ohne Rang sehen ihn nicht.
+- Text mit einfacher Formatierung (Überschriften, Listen, fett, Hinweis, Tabelle), Inhaltsverzeichnis.
+- **Fassungen:** Eine Änderung kann als neue Fassung veröffentlicht werden (alle müssen neu bestätigen, Benachrichtigung) oder als Korrektur ohne neue Version. Alte Fassungen bleiben einsehbar.
+- **Lesebestätigung:** „Gelesen und akzeptiert“ je Fassung; Zähler in der Navigation und Eintrag unter „Handlungsbedarf“, solange etwas offen ist. Verwalter sehen, wer welche Fassung bestätigt hat.
+- Recht „Regelwerk“: lesen haben alle Ränge, bearbeiten die Leitung.
+
+### 15.6 Interaktive Diagramme
+- Tooltip mit allen Werten beim Überfahren, Hilfslinie und hervorgehobener Punkt, gedimmte übrige Balken.
+- Legende: Reihen ein- und ausblenden. Donut: Segment hervorheben, Wert in der Mitte, Segmente über die Legende ausblenden.
+- Zeitraum wählbar (Umsatz 7/14/30/90 Tage, Wochen 8/13/26).
+- Klick führt zu den Daten: Woche → Buchungen dieser Woche, Status-Segment → Auftragsliste mit diesem Status.
+
+## 16. Offene Fragen
 
 Keine. Beantwortet am 2026-11-11: keine Vorsteuer, Gewinnsteuer oder Gewerbeabgabe; nur Festpreise; keine Mindeststunden.
 
